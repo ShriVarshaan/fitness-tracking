@@ -1,34 +1,46 @@
 "use server";
 
-import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
-import { isAllowedEmail } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
-export type LoginState = { status: "idle" | "sent" | "error"; message?: string };
+export type AuthState = { status: "idle" | "error" | "info"; message?: string };
 
-const schema = z.object({ email: z.email() });
+const credentials = z.object({
+  email: z.email({ error: "Enter a valid email address." }),
+  password: z.string().min(8, { error: "Use at least 8 characters for the password." }).max(72),
+});
 
-export async function sendMagicLink(_prev: LoginState, formData: FormData): Promise<LoginState> {
-  const parsed = schema.safeParse({ email: formData.get("email") });
-  if (!parsed.success) return { status: "error", message: "Enter a valid email address." };
+function parse(formData: FormData) {
+  return credentials.safeParse({ email: formData.get("email"), password: formData.get("password") });
+}
 
-  // Same reply whether or not the address is allowed, so the page doesn't
-  // reveal which email owns the app. Only the owner actually gets an email.
-  const sent: LoginState = { status: "sent", message: "If that address can sign in, a link is on its way." };
-  if (!isAllowedEmail(parsed.data.email)) return sent;
+export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = parse(formData);
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
 
-  const h = await headers();
-  const origin = h.get("origin") ?? `https://${h.get("host")}`;
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email: parsed.data.email,
-    options: {
-      shouldCreateUser: false,
-      emailRedirectTo: `${origin}/auth/callback`,
-    },
-  });
+  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  // One message for wrong email or wrong password, so the form doesn't reveal which accounts exist.
+  if (error) return { status: "error", message: "Email or password is incorrect." };
 
-  if (error) return { status: "error", message: "Couldn't send the link. Try again in a minute." };
-  return sent;
+  // The proxy sends accounts with two-step verification on to /mfa.
+  redirect("/");
+}
+
+export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
+  const parsed = parse(formData);
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp(parsed.data);
+  if (error) {
+    return { status: "error", message: error.code === "weak_password" ? error.message : "Couldn't create the account. Try again." };
+  }
+
+  // With email confirmation on, Supabase returns no session until the link is clicked.
+  if (!data.session) {
+    return { status: "info", message: "Check your email to confirm your account, then sign in." };
+  }
+  redirect("/");
 }

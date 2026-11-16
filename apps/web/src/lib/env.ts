@@ -12,14 +12,3 @@ export function publicEnv() {
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   });
 }
-
-/** The only email address allowed to use the app (lower-cased). */
-export function allowedEmail(): string {
-  const value = process.env.ALLOWED_EMAIL?.trim().toLowerCase();
-  if (!value) throw new Error("ALLOWED_EMAIL is not set");
-  return value;
-}
-
-export function isAllowedEmail(email: string | null | undefined): boolean {
-  return !!email && email.trim().toLowerCase() === allowedEmail();
-}

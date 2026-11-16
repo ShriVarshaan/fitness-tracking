@@ -1,19 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isAllowedEmail } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
-/** Magic-link landing: swap the one-time code for a session, then go to MFA. */
+/**
+ * Landing page for links Supabase emails (e.g. confirming an account) and for
+ * any OAuth sign-in added later: swap the one-time code for a session.
+ */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
-  const fail = NextResponse.redirect(new URL("/login?error=link", request.url));
-  if (!code) return fail;
+  if (!code) return NextResponse.redirect(new URL("/login", request.url));
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error || !isAllowedEmail(data.user?.email)) {
-    await supabase.auth.signOut();
-    return fail;
-  }
-
-  return NextResponse.redirect(new URL("/mfa", request.url));
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  return NextResponse.redirect(new URL(error ? "/login" : "/", request.url));
 }

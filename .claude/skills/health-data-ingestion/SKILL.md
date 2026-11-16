@@ -18,7 +18,7 @@ Design: `docs/PLAN.md` §1, §3–§5. This is the checklist every sync path mus
 
 ## Every canonical row must have
 
-- `user_id` (the owner's auth id, from the connection row — never from the payload)
+- `user_id` (from the connection row the job belongs to — never from the payload)
 - Provenance: `source`, `source_record_id`, `source_device`, `fidelity` (`measured|device_estimated|manual|derived`), `raw_ingest_id`, `ingested_at`
 - Canonical units via `packages/core/units.ts` (m, s, m/s, kg, kcal, bpm, ms, °C, % as 0–100, W, mL, g)
 - Time: `timestamptz` instant + `tz_offset_min` **from the event itself** (Garmin `startTimeOffsetInSeconds`); `local_date` from that offset, not the current zone. Sleep belongs to the local date of waking. Daily summaries use Garmin's calendar date.

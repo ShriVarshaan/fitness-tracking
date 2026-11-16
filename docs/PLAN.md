@@ -1,13 +1,13 @@
 # Personal Fitness Tracker — Plan
 
-> Status: plan only, no application code yet. Rewritten 16 Nov 2026 for a single-user, £0 build.
+> Status: Phase 0 in progress. Rewritten 16 Nov 2026 for a £0 build; updated the same day to open sign-ups (each account sees only its own data).
 > It replaces the earlier family / Garmin Starter / Oracle Cloud plan, which was never committed.
 
 ## Context
 
-A web app **for one person (me)** that:
+A web app built for me, with **open sign-up** so recruiters and others can create an account and try it. It:
 
-- pulls my Garmin data using Garmin's free **Personal API key**, which I paste into a box in the app;
+- pulls each user's Garmin data using their own free Garmin **Personal API key**, pasted into a box in the app;
 - shows dashboards and trends similar to Garmin Connect+ where a website can do that;
 - gives **advice traceable to the numbers**, and says plainly when data is missing;
 - costs **£0** to run.
@@ -16,10 +16,10 @@ A web app **for one person (me)** that:
 
 | Topic | Decision | Consequence |
 |---|---|---|
-| Users | Just me | No invites, family sharing, per-person consent or admin pages. A single login still guards the app because it is on the public internet. |
+| Users | Me, plus **anyone who signs up** (e.g. recruiters) | Email + password sign-up with no confirmation email (Supabase's free email only reaches team members). Every account sees only its own rows (RLS). Two-step verification optional per account. No family sharing or admin pages. |
 | Data source | **Garmin Personal API**, key pasted into Settings | Pull only. No approval process. Key → 24 h access token, no refresh token. Key lifetime 30 d / 90 d / 180 d / 1 yr, chosen when created; shown only once. |
 | Hosting | **Vercel Hobby** (free, personal non-commercial use) | Next.js deploys from GitHub. Serverless functions only, no long-running worker. Vercel cron is limited to once a day on Hobby, so scheduling moves to Supabase. |
-| Database, secrets, login, scheduling | **Supabase Free**, London region (eu-west-2) | Postgres for all data, **Vault** for the Garmin key, **Auth** for my login, **Cron** (pg_cron + pg_net) to trigger syncs. |
+| Database, secrets, login, scheduling | **Supabase Free**, Frankfurt region (eu-central-1) | Postgres for all data, **Vault** for each user's Garmin key, **Auth** for accounts, **Cron** (pg_cron + pg_net) to trigger syncs. Vercel functions pinned to `fra1` to sit next to the database. |
 | AI advice | **Groq free tier** (optional) → deterministic template fallback | No paid fallback. The app is fully useful with AI switched off. |
 | Approximations | Build home-made scores, **clearly labelled** | Every estimate shows "Estimate · our formula", its formula and a confidence level. Nothing is presented as a Garmin metric. |
 
@@ -31,7 +31,7 @@ A web app **for one person (me)** that:
 
 | Item | Detail |
 |---|---|
-| Who it's for | One person accessing their own data; "not for apps serving multiple end users". |
+| Who it's for | One person accessing their own data; "not for apps serving multiple end users". **Risk accepted:** each user pastes their own key for their own data, which is a grey area under these terms (see §12). |
 | APIs | Activity (JSON summaries + FIT files), Health, Women's Health. |
 | Auth | `POST https://personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token` with header `Authorization: ApiKey <key>` → bearer access token valid **24 h or until the key expires**, whichever is first. No refresh token: request a new token with the key. |
 | Delivery | Pull only. Per-call date ranges (e.g. daily summaries up to 1 year per call), which also gives **history backfill** without the Garmin account export. |
@@ -63,12 +63,12 @@ A web app **for one person (me)** that:
 └──────────────┬─────────────────────────────────┬───────────────┘
                │ service-role key (server only)  │ bearer token
                ▼                                 ▼
-┌──────── Supabase Free · London ────────┐   Garmin Personal API
+┌─────── Supabase Free · Frankfurt ──────┐   Garmin Personal API
 │  Postgres: health data, sync_jobs      │
 │  Vault: Garmin API key, access token,  │   Groq (optional, AI text)
 │         CRON_SECRET                    │
-│  Auth: my email only, sign-ups off,    │
-│        TOTP MFA                        │
+│  Auth: email + password, open sign-up, │
+│        optional TOTP MFA               │
 │  Cron: every 30 min → pg_net POST      │
 │        /api/sync/tick                  │
 │  Storage: raw FIT files (1 GB free)    │
@@ -84,7 +84,7 @@ A web app **for one person (me)** that:
 | Database | **Supabase Postgres** | Window functions for rolling averages and baselines, JSONB for raw payloads, row-level security. |
 | DB access | **Drizzle ORM** + drizzle-kit migrations, via Supabase's transaction pooler (`prepare: false`) | Typed, SQL-first, easy raw SQL for analytics. `supabase-js` is used only for Auth. |
 | Secrets | **Supabase Vault** | Garmin key encrypted at rest in the database; decrypted only through `SECURITY DEFINER` functions granted to `service_role`. |
-| Login | **Supabase Auth**: magic link + TOTP MFA, sign-ups disabled, email allowlist checked in middleware | Free, one user, nothing extra to run. |
+| Login | **Supabase Auth**: email + password, open sign-up, "Confirm email" off; optional TOTP MFA enforced by `src/proxy.ts` once enabled | Free, no email service or domain needed. |
 | Scheduling | **Supabase Cron** (pg_cron + pg_net) → `/api/sync/tick` | Every 30 min for free; Vercel Hobby cron is once a day. |
 | Background work | `sync_jobs` table processed in small steps per tick | No long-running worker on Vercel. Each tick claims a few jobs (`FOR UPDATE SKIP LOCKED`) and stays well within the function time limit. |
 | Validation | **Zod** | Garmin payloads, API inputs, LLM structured output. |
@@ -123,7 +123,7 @@ docs/                    PLAN.md, adr/*.md
 6. **Expiry warnings** at 14, 7 and 1 days on the Today page. A `401` from the token endpoint marks the connection "key expired or revoked" and pauses syncing.
 7. **Remove key** deletes the Vault secrets and stops syncing. A separate "Delete all my Garmin data" button purges the data.
 
-Vault access goes through two `SECURITY DEFINER` SQL functions (`garmin_get_secret(name)`, `garmin_set_secret(name, value)`) with `EXECUTE` granted only to `service_role`. The service-role key is a Vercel environment variable used only in server code and never prefixed `NEXT_PUBLIC_`.
+Vault access goes through `SECURITY DEFINER` functions in a non-exposed `private` schema (`private.get_secret`, `private.set_secret`, `private.delete_secret`; secret names `garmin_api_key:<user_id>`, `garmin_access_token:<user_id>`) with `EXECUTE` granted only to `service_role`. The service-role key is a Vercel environment variable used only in server code and never prefixed `NEXT_PUBLIC_`.
 
 ---
 
@@ -245,13 +245,14 @@ DOIs are checked when each formula is implemented.
 
 ## 9. Security & privacy
 
-- **Login:** Supabase Auth magic link to my email only; sign-ups disabled in the dashboard; middleware also checks an email allowlist; TOTP MFA required.
+- **Login:** Supabase Auth email + password (min 8 characters), open sign-up. Optional TOTP two-step verification per account (Settings → Security); once on, the proxy requires it for every page and API route. Sign-in errors don't reveal whether an account exists.
 - **Secrets:** Garmin key and token in Supabase Vault; service-role key and `CRON_SECRET` only in Vercel server environment variables; nothing secret in the client bundle (checked in CI by scanning the build output).
 - **Database:** RLS enabled on every table; the anon key can't read anything without my session. `raw_ingest` kept 30 days.
 - **Transport:** HTTPS everywhere (Vercel, Supabase, Garmin).
-- **Processors I'm choosing to use:** Vercel (hosting; health data passes through its functions), Supabase (London), Groq (US, only if AI is switched on; turn on zero data retention in Groq's data controls).
-- **Data rights for myself:** export everything as a zip of JSON/CSV; delete Garmin data; delete everything.
-- **UK GDPR:** processing my own data for personal use falls under the household exemption. If I ever add other people, this needs proper consent, per-person data isolation and a privacy notice.
+- **Processors:** Vercel (hosting; health data passes through its functions), Supabase (Frankfurt), Groq (US, only if a user switches AI on; zero data retention on).
+- **Data rights for every user:** export everything as a zip of JSON/CSV; delete Garmin data; **delete account** (removes the auth user, which cascades to all their rows and Vault secrets).
+- **UK GDPR:** other people's health data (special category) is stored, so the household exemption no longer applies. Needed: a short **privacy notice** shown at sign-up (what's stored, where, processors, retention, how to delete), explicit consent at sign-up for health-data processing, and a separate opt-in before any data goes to Groq.
+- **Abuse limits:** Supabase Auth rate limits on sign-up/sign-in; per-user caps on stored activity streams so one account can't fill the 500 MB database.
 - **Regulatory:** stay a wellness tool with no diagnostic claims.
 
 ---
@@ -273,7 +274,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 
 | Phase | Scope | Effort |
 |---|---|---|
-| **0 — Foundations** | GitHub repo; Supabase project (London); Vercel project linked to the repo; monorepo scaffold, lint, typecheck, Vitest, CI; Drizzle schema + RLS; Supabase Auth login (magic link + TOTP, sign-ups off); metric registry, units, time helpers; deploy a "hello" page behind login. | 3–5 days |
+| **0 — Foundations** | GitHub repo; Supabase project (Frankfurt); Vercel project linked to the repo (`fra1`); monorepo scaffold, lint, typecheck, Vitest, CI; Drizzle schema + RLS; Supabase Auth (email + password sign-up, optional TOTP); metric registry, units, time helpers; deploy a "hello" page behind login. | 3–5 days |
 | **1 — MVP** | Garmin key box + Vault; token handling; sync tick + Supabase Cron; backfill and incremental sync for dailies, sleep, HRV, stress / Body Battery, user metrics, activities (+ details / FIT if available); canonical tables; derived v1 (TRIMP, CTL/ATL/TSB, HRV and resting-HR baselines, sleep debt, readiness); rules v1 incl. red flags; **template** morning insight; Today, Activities (list, detail, 2D map, charts), basic Trends; Settings (connection, sync status, export, delete). | 2–3 wk |
 | **2 — AI and insights** | Groq wording with validators and the eval suite; post-workout, evening and weekly insights; Web Push. | 1–2 wk |
 | **3 — More features** | Dashboard builder; chat with tools; RPE capture; training plans (in-app); nutrition; 3D maps; year-end recap. | 4–6 wk |
@@ -293,14 +294,16 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 | Groq free quota or policy changes | No AI wording | Templates are the default; AI is optional. |
 | AI produces wrong numbers or unsafe advice | Bad advice | Rules first, numeric grounding validator, fixed red-flag wording, eval gate. |
 | Leaked service-role key or `CRON_SECRET` | Data exposure | Server-only env vars, bundle scan in CI, rotate on suspicion. |
+| Garmin objects to a personal-key app used by several people | Key or developer account revoked | Accepted risk; existing data stays; fall back to account-export import. |
+| Open sign-up abused (junk accounts, storage, sync load) | Quota exhaustion | Auth rate limits, per-user storage caps, cron processes a bounded number of jobs per tick across all users. |
 
-**To confirm during implementation** (recorded as ADRs): the five Personal API questions in §1; Vercel Hobby's current function duration limit; whether pg_net-triggered traffic keeps a free Supabase project from pausing; the current Groq free model list and limits; whether Supabase Auth passkeys are available (otherwise magic link + TOTP).
+**To confirm during implementation** (recorded as ADRs): the five Personal API questions in §1; Vercel Hobby's current function duration limit; whether pg_net-triggered traffic keeps a free Supabase project from pausing; the current Groq free model list and limits; whether Supabase Auth passkeys are available.
 
 ---
 
 ## 13. Verification
 
-- **Phase 0:** pushing to `main` deploys to Vercel; only my email can log in; a second email is refused; CI green (lint, typecheck, unit, RLS tests).
+- **Phase 0:** pushing to `main` deploys to Vercel; a new visitor can sign up and sign in; a second account can't read the first account's rows; turning on two-step verification makes the code required at the next sign-in; CI green (lint, typecheck, unit, RLS tests).
 - **Phase 1:**
   1. Paste the key: Settings shows "key saved · expires in N days", and the key never appears in browser network responses.
   2. Backfill finishes; activity counts match Garmin Connect for the same date range.

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 
@@ -8,10 +9,13 @@ export default async function TodayPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 space-y-8 px-4 py-10">
-      <header className="flex items-baseline justify-between gap-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
-        <div className="flex items-center gap-3 text-sm text-muted">
+        <div className="flex min-w-0 items-center gap-3 text-sm text-muted">
           <span className="truncate">{email}</span>
+          <Link href="/settings/security" className="underline">
+            Security
+          </Link>
           <SignOutButton />
         </div>
       </header>

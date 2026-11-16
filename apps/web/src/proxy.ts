@@ -1,12 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { gate, type Session } from "@/lib/auth-gate";
-import { isAllowedEmail, publicEnv } from "@/lib/env";
+import { publicEnv } from "@/lib/env";
 
 /**
  * Runs before every page and API route:
  * 1. refreshes the Supabase session cookie;
- * 2. lets only the allowed email, with the second factor done, past.
+ * 2. requires a signed-in user, and the second step for accounts that turned it on.
  */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -28,15 +28,17 @@ export async function proxy(request: NextRequest) {
 
   // getClaims() verifies the JWT; never trust an unverified session cookie.
   const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
-  const session: Session = claims
-    ? {
-        email: typeof claims.email === "string" ? claims.email : null,
-        aal: claims.aal === "aal2" ? "aal2" : "aal1",
-      }
-    : null;
+  let session: Session = null;
+  if (data?.claims) {
+    // Reads the verified session: current level, and aal2 if the user has an MFA factor.
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    session = {
+      currentLevel: aal?.currentLevel === "aal2" ? "aal2" : "aal1",
+      nextLevel: aal?.nextLevel === "aal2" ? "aal2" : "aal1",
+    };
+  }
 
-  const result = gate(request.nextUrl.pathname, session, isAllowedEmail);
+  const result = gate(request.nextUrl.pathname, session);
 
   if (result.action === "deny") {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

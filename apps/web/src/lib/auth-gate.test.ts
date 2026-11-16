@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { gate, isPublicPath, type Session } from "./auth-gate";
 
-const allowed = (e: string | null) => e === "me@example.com";
-const me2: Session = { email: "me@example.com", aal: "aal2" };
-const me1: Session = { email: "me@example.com", aal: "aal1" };
-const stranger: Session = { email: "someone@example.com", aal: "aal2" };
+const noMfa: Session = { currentLevel: "aal1", nextLevel: "aal1" };
+const mfaPending: Session = { currentLevel: "aal1", nextLevel: "aal2" };
+const mfaDone: Session = { currentLevel: "aal2", nextLevel: "aal2" };
 
 describe("isPublicPath", () => {
   it("matches public routes exactly or as prefixes", () => {
@@ -22,34 +21,39 @@ describe("isPublicPath", () => {
 
 describe("gate", () => {
   it("sends anonymous visitors to /login", () => {
-    expect(gate("/", null, allowed)).toEqual({ action: "redirect", to: "/login" });
+    expect(gate("/", null)).toEqual({ action: "redirect", to: "/login" });
   });
 
   it("denies anonymous API calls instead of redirecting", () => {
-    expect(gate("/api/garmin/key", null, allowed)).toEqual({ action: "deny" });
+    expect(gate("/api/garmin/key", null)).toEqual({ action: "deny" });
   });
 
-  it("refuses a logged-in user who isn't the allowed email", () => {
-    expect(gate("/", stranger, allowed)).toEqual({ action: "redirect", to: "/login" });
-    expect(gate("/api/garmin/key", stranger, allowed)).toEqual({ action: "deny" });
+  it("lets signed-in users without two-step verification through", () => {
+    expect(gate("/", noMfa)).toEqual({ action: "next" });
+    expect(gate("/api/garmin/key", noMfa)).toEqual({ action: "next" });
   });
 
-  it("requires the second factor before anything else", () => {
-    expect(gate("/", me1, allowed)).toEqual({ action: "redirect", to: "/mfa" });
-    expect(gate("/mfa", me1, allowed)).toEqual({ action: "next" });
-    expect(gate("/api/garmin/key", me1, allowed)).toEqual({ action: "deny" });
+  it("requires the second step once an account has turned it on", () => {
+    expect(gate("/", mfaPending)).toEqual({ action: "redirect", to: "/mfa" });
+    expect(gate("/mfa", mfaPending)).toEqual({ action: "next" });
+    expect(gate("/api/garmin/key", mfaPending)).toEqual({ action: "deny" });
   });
 
-  it("lets the fully authenticated owner through", () => {
-    expect(gate("/", me2, allowed)).toEqual({ action: "next" });
-    expect(gate("/settings", me2, allowed)).toEqual({ action: "next" });
+  it("lets a user who completed the second step through", () => {
+    expect(gate("/", mfaDone)).toEqual({ action: "next" });
   });
 
-  it("bounces the owner away from /login", () => {
-    expect(gate("/login", me2, allowed)).toEqual({ action: "redirect", to: "/" });
+  it("sends users who don't need /mfa away from it", () => {
+    expect(gate("/mfa", noMfa)).toEqual({ action: "redirect", to: "/" });
+    expect(gate("/mfa", mfaDone)).toEqual({ action: "redirect", to: "/" });
+  });
+
+  it("bounces signed-in users away from /login, but not mid-verification", () => {
+    expect(gate("/login", noMfa)).toEqual({ action: "redirect", to: "/" });
+    expect(gate("/login", mfaPending)).toEqual({ action: "next" });
   });
 
   it("always lets the cron endpoint through (it checks its own secret)", () => {
-    expect(gate("/api/sync/tick", null, allowed)).toEqual({ action: "next" });
+    expect(gate("/api/sync/tick", null)).toEqual({ action: "next" });
   });
 });
