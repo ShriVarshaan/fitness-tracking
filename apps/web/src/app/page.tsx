@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { InsightCard } from "@/components/insight-card";
 import { Sparkline } from "@/components/sparkline";
 import { formatDay, formatDuration, formatKm, formatNumber, mean, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
@@ -82,6 +83,7 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
 
   return (
     <div className="space-y-4">
+      {data.insight && <InsightCard insight={data.insight} />}
       <ReadinessCard readiness={est("readiness")} trend={estSeries("readiness")} />
       <SleepCard night={night} />
 

@@ -80,7 +80,7 @@ const WORDING: Record<string, Wording> = {
   }),
   RECOVERY_NORMAL: (_f, ev) => ({
     headline: "You look recovered",
-    sentence: `HRV (${fmt(ev("hrv_7d"))}) and resting heart rate (${fmt(ev("rhr_today"))}) are within your usual range, and you slept ${fmt(ev("sleep_last_night"))}.`,
+    sentence: `Your 7-night HRV average (${fmt(ev("hrv_7d"))}) and today's resting heart rate (${fmt(ev("rhr_today"))}) are within your usual ranges, and you slept ${fmt(ev("sleep_last_night"))}.`,
     action: { text: "A normal or harder training day looks reasonable if you feel good.", evidenceIds: ["hrv_7d", "rhr_today", "sleep_last_night"] },
   }),
 };

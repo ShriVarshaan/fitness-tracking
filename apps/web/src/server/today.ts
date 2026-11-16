@@ -1,4 +1,5 @@
 import "server-only";
+import type { Insight } from "@ft/advice";
 import { addDays } from "@ft/core";
 import { createClient } from "@/lib/supabase/server";
 
@@ -56,6 +57,8 @@ export interface TodayData {
   sleep: Map<string, SleepNight>;
   /** Our estimates: metric code → date → value. */
   derived: Map<string, Map<string, DerivedValue>>;
+  /** Latest morning insight, if it passed validation. */
+  insight: Insight | null;
   connection: { status: string; key_expires_on: string | null; backfill_complete: boolean } | null;
 }
 
@@ -77,12 +80,13 @@ export async function loadToday(): Promise<TodayData> {
       hrv: new Map(),
       sleep: new Map(),
       derived: new Map(),
+      insight: null,
       connection: connection ?? null,
     };
   }
 
   const from = addDays(latestDate, -(WINDOW_DAYS - 1));
-  const [{ data: days }, { data: hrv }, { data: sleep }, { data: derived }] = await Promise.all([
+  const [{ data: days }, { data: hrv }, { data: sleep }, { data: derived }, { data: insightRow }] = await Promise.all([
     supabase
       .from("daily_summaries")
       .select(
@@ -109,6 +113,13 @@ export async function loadToday(): Promise<TodayData> {
       .in("metric_code", ["readiness", "ctl", "atl", "tsb", "acwr", "sleep_debt", "trimp_daily"])
       .gte("local_date", from)
       .lte("local_date", latestDate),
+    supabase
+      .from("insights")
+      .select("body, validator_ok")
+      .eq("kind", "morning")
+      .order("for_date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const derivedByMetric = new Map<string, Map<string, DerivedValue>>();
@@ -126,6 +137,8 @@ export async function loadToday(): Promise<TodayData> {
     // If a date has two sessions, the later one (ordered by end time) wins.
     sleep: new Map((sleep as SleepNight[] | null)?.map((s) => [s.local_date, s]) ?? []),
     derived: derivedByMetric,
+    // Only show insights that passed the hard checks.
+    insight: insightRow?.validator_ok ? (insightRow.body as Insight) : null,
     connection: connection ?? null,
   };
 }

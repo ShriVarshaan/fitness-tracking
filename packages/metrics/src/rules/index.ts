@@ -11,6 +11,7 @@ import { missingOvernight } from "./missing-overnight";
 import { recoveryNormal } from "./recovery-normal";
 
 export * from "./types";
+export * from "./context";
 
 export const RULES = [
   rhrRedFlag,

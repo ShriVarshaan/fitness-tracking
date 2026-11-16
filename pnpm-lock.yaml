@@ -184,6 +184,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ft/advice':
+        specifier: workspace:*
+        version: link:../../packages/advice
       '@ft/core':
         specifier: workspace:*
         version: link:../../packages/core

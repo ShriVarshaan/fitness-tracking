@@ -1,24 +1,30 @@
 import "server-only";
+import { morningInsight, validateInsight } from "@ft/advice";
+import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
-import { deriveAll } from "@ft/metrics";
-import { asc, eq, sql } from "drizzle-orm";
+import { buildRuleContext, deriveAll, evaluateRules, type DeriveInputs, type DerivedRow } from "@ft/metrics";
+import { and, asc, eq, gte, sql } from "drizzle-orm";
 
-const { activities, dailySummaries, derivedDaily, hrvDaily, profile, sleepSessions } = schema;
+const { activities, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
 
 const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
+/** Rules are evaluated (and findings kept) for this many recent days. */
+const FINDINGS_DAYS = 30;
 
 /** Users with Garmin data but no derived rows yet (e.g. first sync, or a new metric version rollout). */
 export async function usersMissingDerived(db: Db): Promise<string[]> {
   const rows = await db.execute<{ user_id: string }>(sql`
     select distinct d.user_id from daily_summaries d
     where not exists (select 1 from derived_daily x where x.user_id = d.user_id)
+       or not exists (select 1 from insights i where i.user_id = d.user_id)
     limit 5`);
   return rows.map((r) => r.user_id);
 }
 
-/** Recompute every derived metric for one user from their stored data. */
-export async function recomputeDerived(db: Db, userId: string): Promise<number> {
+type Inputs = DeriveInputs & { spo2Overnight: Array<{ date: string; value: number }> };
+
+async function loadInputs(db: Db, userId: string): Promise<Inputs> {
   const [hrv, days, nights, acts, prof] = await Promise.all([
     db
       .select({ date: hrvDaily.localDate, value: hrvDaily.lastNightAvgMs })
@@ -32,28 +38,32 @@ export async function recomputeDerived(db: Db, userId: string): Promise<number> 
       .orderBy(asc(dailySummaries.localDate)),
     // If a wake date has more than one session, use the longest.
     db
-      .select({ date: sleepSessions.localDate, value: sql<number>`max(${sleepSessions.totalSleepS})`.mapWith(Number) })
+      .select({
+        date: sleepSessions.localDate,
+        value: sql<number>`max(${sleepSessions.totalSleepS})`.mapWith(Number),
+        spo2: sql<number | null>`avg(${sleepSessions.avgSpo2})`.mapWith((v) => (v === null ? null : Number(v))),
+      })
       .from(sleepSessions)
       .where(eq(sleepSessions.userId, userId))
       .groupBy(sleepSessions.localDate),
-    db
-      .select({ date: activities.localDate, zoneSeconds: activities.hrZoneS })
-      .from(activities)
-      .where(eq(activities.userId, userId)),
+    db.select({ date: activities.localDate, zoneSeconds: activities.hrZoneS }).from(activities).where(eq(activities.userId, userId)),
     db.query.profile.findFirst({ columns: { sleepNeedMin: true }, where: eq(profile.userId, userId) }),
   ]);
 
   const present = <T extends { value: number | null }>(rows: Array<T & { date: string }>) =>
-    rows.filter((r): r is T & { date: string; value: number } => typeof r.value === "number");
+    rows.filter((r): r is T & { date: string; value: number } => typeof r.value === "number").map((r) => ({ date: r.date, value: r.value }));
 
-  const rows = deriveAll({
+  return {
     hrv: present(hrv),
     rhr: present(days),
     sleep: present(nights),
+    spo2Overnight: nights.flatMap((n) => (typeof n.spo2 === "number" ? [{ date: n.date, value: n.spo2 }] : [])),
     activities: acts,
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
-  });
+  };
+}
 
+async function storeDerived(db: Db, userId: string, rows: DerivedRow[]): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK).map((r) => ({ ...r, userId, computedAt: new Date() }));
     await db
@@ -73,5 +83,69 @@ export async function recomputeDerived(db: Db, userId: string): Promise<number> 
         setWhere: sql`${derivedDaily.inputsHash} is distinct from excluded.inputs_hash`,
       });
   }
+}
+
+/** Evaluate rules for recent days, replace their findings, and write today's morning insight. */
+async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, rows: DerivedRow[]): Promise<void> {
+  const latest = rows.reduce<string | null>((max, r) => (max === null || r.localDate > max ? r.localDate : max), null);
+  if (!latest) return;
+  const from = addDays(latest, -(FINDINGS_DAYS - 1));
+  const recentRows = rows.filter((r) => daysBetween(addDays(from, -60), r.localDate) >= 0);
+
+  const perDay = Array.from({ length: FINDINGS_DAYS }, (_, i) => addDays(from, i)).map((date) => ({
+    date,
+    found: evaluateRules(buildRuleContext(date, inputs, recentRows)),
+  }));
+
+  await db.transaction(async (tx) => {
+    await tx.delete(findings).where(and(eq(findings.userId, userId), gte(findings.localDate, from)));
+    const values = perDay.flatMap(({ date, found }) =>
+      found.map((f) => ({
+        userId,
+        localDate: date,
+        ruleId: f.ruleId,
+        ruleVersion: f.ruleVersion,
+        severity: f.severity,
+        confidence: f.confidence,
+        evidence: f.evidence,
+      })),
+    );
+    if (values.length) await tx.insert(findings).values(values);
+  });
+
+  const today = perDay.at(-1)!;
+  const has = (list: Array<{ date: string }>) => list.some((p) => p.date === latest);
+  const hrvToday = rows.find((r) => r.localDate === latest && r.metricCode === "hrv_baseline");
+  const insight = morningInsight(latest, today.found, {
+    sleepLastNight: has(inputs.sleep),
+    hrvLastNight: has(inputs.hrv),
+    restingHrToday: has(inputs.rhr),
+    baselineReason: hrvToday?.value === null ? String(hrvToday.components.reason ?? "") || null : null,
+  });
+  const check = validateInsight(insight);
+
+  await db
+    .insert(insights)
+    .values({
+      userId,
+      kind: "morning",
+      forDate: latest,
+      body: insight as unknown as Record<string, unknown>,
+      ruleIds: insight.ruleIds,
+      model: insight.model,
+      validatorOk: check.ok,
+    })
+    .onConflictDoUpdate({
+      target: [insights.userId, insights.kind, insights.forDate],
+      set: { body: sql`excluded.body`, ruleIds: sql`excluded.rule_ids`, model: sql`excluded.model`, validatorOk: sql`excluded.validator_ok`, createdAt: sql`now()` },
+    });
+}
+
+/** Recompute derived metrics, findings and the morning insight for one user. */
+export async function recomputeDerived(db: Db, userId: string): Promise<number> {
+  const inputs = await loadInputs(db, userId);
+  const rows = deriveAll(inputs);
+  await storeDerived(db, userId, rows);
+  await storeFindingsAndInsight(db, userId, inputs, rows);
   return rows.length;
 }

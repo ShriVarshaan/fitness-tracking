@@ -71,6 +71,13 @@
       "when": 1794855208159,
       "tag": "20261116185328_derived_daily",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794855754066,
+      "tag": "20261116190234_findings_insights",
+      "breakpoints": true
     }
   ]
 }
