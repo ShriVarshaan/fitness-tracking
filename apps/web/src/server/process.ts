@@ -104,6 +104,8 @@ class UnmappedError extends Error {
 export interface ProcessResult {
   processed: number;
   quarantined: number;
+  /** Users who received new canonical rows (their derived metrics need recomputing). */
+  touchedUsers: string[];
 }
 
 /**
@@ -112,7 +114,8 @@ export interface ProcessResult {
  */
 export async function processPending(db: Db, opts: { userId?: string; budgetMs: number; limit?: number }): Promise<ProcessResult> {
   const started = Date.now();
-  const result: ProcessResult = { processed: 0, quarantined: 0 };
+  const result: ProcessResult = { processed: 0, quarantined: 0, touchedUsers: [] };
+  const touched = new Set<string>();
   const rows = await db
     .select()
     .from(rawIngest)
@@ -128,6 +131,7 @@ export async function processPending(db: Db, opts: { userId?: string; budgetMs: 
       await mapRow(db, row);
       await db.update(rawIngest).set({ processedAt: new Date() }).where(eq(rawIngest.id, row.id));
       result.processed++;
+      touched.add(row.userId);
     } catch (err) {
       const message =
         err instanceof ZodError
@@ -142,5 +146,6 @@ export async function processPending(db: Db, opts: { userId?: string; budgetMs: 
       result.quarantined++;
     }
   }
+  result.touchedUsers = [...touched];
   return result;
 }

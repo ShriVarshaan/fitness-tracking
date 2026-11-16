@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Sparkline } from "@/components/sparkline";
 import { formatDay, formatDuration, formatKm, formatNumber, mean, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
-import { loadToday, type SleepNight } from "@/server/today";
+import { loadToday, type DerivedValue, type SleepNight } from "@/server/today";
 import { SignOutButton } from "./sign-out-button";
 
 export default async function TodayPage() {
@@ -76,8 +76,13 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
       ? { low: hrvToday.baseline_balanced_low_ms, high: hrvToday.baseline_balanced_upper_ms }
       : null;
 
+  const est = (code: string) => data.derived.get(code)?.get(latest);
+  const estSeries = (code: string) => series((d) => data.derived.get(code)?.get(d)?.value);
+  const debt = est("sleep_debt");
+
   return (
     <div className="space-y-4">
+      <ReadinessCard readiness={est("readiness")} trend={estSeries("readiness")} />
       <SleepCard night={night} />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -120,9 +125,133 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
 
       <Card title="Sleep, last 30 nights">
         <p className="text-sm text-muted">7-night average {formatDuration(sleep7)}</p>
+        <p className="text-sm">
+          {debt?.value != null ? (
+            <>
+              Sleep debt this week <strong className="font-semibold">{formatDuration(debt.value)}</strong>{" "}
+              <EstimateTag confidence={debt.confidence} />
+            </>
+          ) : (
+            <span className="text-muted">Sleep debt not available: {String(debt?.components.reason ?? "no data")}</span>
+          )}
+        </p>
         <Sparkline values={sleep} label="Sleep duration, last 30 nights" />
       </Card>
+
+      <LoadCard
+        ctl={est("ctl")}
+        atl={est("atl")}
+        tsb={est("tsb")}
+        acwr={est("acwr")}
+        loads={estSeries("trimp_daily")}
+        ctlTrend={estSeries("ctl")}
+      />
     </div>
+  );
+}
+
+const COMPONENT_LABELS: Record<string, string> = {
+  hrv: "HRV",
+  rhr: "Resting HR",
+  sleep: "Sleep",
+  regularity: "Sleep regularity",
+  load: "Training load",
+};
+
+function EstimateTag({ confidence }: { confidence: number }) {
+  const level = confidence >= 0.75 ? "high" : confidence >= 0.4 ? "medium" : "low";
+  return (
+    <span className="whitespace-nowrap text-xs text-muted">
+      · Estimate ·{" "}
+      <Link href="/methods" className="underline">
+        our formula
+      </Link>{" "}
+      · {level} confidence
+    </span>
+  );
+}
+
+function ReadinessCard({ readiness, trend }: { readiness: DerivedValue | undefined; trend: Array<number | null> }) {
+  if (!readiness || readiness.value === null) {
+    return (
+      <Card title="Readiness">
+        <p className="text-sm text-muted">
+          Not available: {String(readiness?.components.reason ?? "not enough data yet")}.
+        </p>
+      </Card>
+    );
+  }
+  const parts = (readiness.components.components ?? {}) as Record<string, number>;
+  const missing = (readiness.components.missing ?? []) as string[];
+  return (
+    <Card title="Readiness">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <Big value={formatNumber(readiness.value)} unit="/ 100" />
+        <EstimateTag confidence={readiness.confidence} />
+      </div>
+      <ul className="space-y-1.5 pt-1">
+        {Object.entries(parts).map(([key, score]) => (
+          <li key={key} className="grid grid-cols-[7.5rem_1fr_2rem] items-center gap-2 text-sm">
+            <span className="text-muted">{COMPONENT_LABELS[key] ?? key}</span>
+            <span className="h-1.5 overflow-hidden rounded-full bg-border">
+              <span className="block h-full rounded-full bg-accent" style={{ width: `${score}%` }} />
+            </span>
+            <span className="text-right tabular-nums">{formatNumber(score)}</span>
+          </li>
+        ))}
+      </ul>
+      {missing.length > 0 && (
+        <p className="text-xs text-muted">
+          Not available: {missing.map((m) => COMPONENT_LABELS[m] ?? m).join(", ")}. The score uses the rest.
+        </p>
+      )}
+      <Sparkline values={trend} label="Readiness estimate, last 30 days" />
+      <p className="text-xs text-muted">Our own heuristic, not Garmin&rsquo;s Training Readiness or Body Battery.</p>
+    </Card>
+  );
+}
+
+function LoadCard({
+  ctl,
+  atl,
+  tsb,
+  acwr,
+  loads,
+  ctlTrend,
+}: {
+  ctl: DerivedValue | undefined;
+  atl: DerivedValue | undefined;
+  tsb: DerivedValue | undefined;
+  acwr: DerivedValue | undefined;
+  loads: Array<number | null>;
+  ctlTrend: Array<number | null>;
+}) {
+  const sessions = loads.filter((l) => (l ?? 0) > 0).length;
+  return (
+    <Card title="Training load">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-sm text-muted">{sessions} session{sessions === 1 ? "" : "s"} with heart-rate zones in 30 days</span>
+        {ctl && <EstimateTag confidence={ctl.confidence} />}
+      </div>
+      <dl className="grid grid-cols-3 gap-2 text-center">
+        {[
+          ["Fitness", ctl?.value],
+          ["Fatigue", atl?.value],
+          ["Form", tsb?.value],
+        ].map(([label, v]) => (
+          <div key={label as string} className="rounded-md border border-border p-2">
+            <dt className="text-xs text-muted">{label}</dt>
+            <dd className="text-xl font-semibold tabular-nums">{formatNumber(v as number | null | undefined)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-sm text-muted">
+        {acwr?.value != null
+          ? `Load spike ratio ${formatNumber(acwr.value, 2)} (0.8–1.3 is typical; descriptive only)`
+          : "Load spike ratio not available: needs 28 days of history and recent training."}
+      </p>
+      <Sparkline values={ctlTrend} label="Fitness (chronic load), last 30 days" />
+    </Card>
   );
 }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/server/db";
 import { requireUserId } from "@/server/session";
+import { recomputeDerived } from "@/server/derive";
 import { processPending } from "@/server/process";
 import { connectGarmin, disconnectGarmin, runTick } from "@/server/sync";
 
@@ -71,8 +72,10 @@ export async function syncNow(): Promise<void> {
     const db = getDb();
     await runTick(db, { userId, budgetMs: 20_000, maxJobs: 20 });
     await processPending(db, { userId, budgetMs: 10_000 });
+    await recomputeDerived(db, userId);
   } catch (err) {
     console.error("syncNow failed:", err instanceof Error ? err.message : err);
   }
   revalidatePath("/settings/garmin");
+  revalidatePath("/");
 }

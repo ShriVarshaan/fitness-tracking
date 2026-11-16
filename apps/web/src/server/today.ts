@@ -41,6 +41,12 @@ export interface SleepNight {
   sleep_need_min: number | null;
 }
 
+export interface DerivedValue {
+  value: number | null;
+  confidence: number;
+  components: Record<string, unknown>;
+}
+
 export interface TodayData {
   /** Most recent day with data; null if nothing has synced yet. */
   latestDate: string | null;
@@ -48,6 +54,8 @@ export interface TodayData {
   days: Map<string, DaySummary>;
   hrv: Map<string, HrvDay>;
   sleep: Map<string, SleepNight>;
+  /** Our estimates: metric code → date → value. */
+  derived: Map<string, Map<string, DerivedValue>>;
   connection: { status: string; key_expires_on: string | null; backfill_complete: boolean } | null;
 }
 
@@ -62,11 +70,19 @@ export async function loadToday(): Promise<TodayData> {
 
   const latestDate = (latest?.local_date as string | undefined) ?? null;
   if (!latestDate) {
-    return { latestDate: null, dates: [], days: new Map(), hrv: new Map(), sleep: new Map(), connection: connection ?? null };
+    return {
+      latestDate: null,
+      dates: [],
+      days: new Map(),
+      hrv: new Map(),
+      sleep: new Map(),
+      derived: new Map(),
+      connection: connection ?? null,
+    };
   }
 
   const from = addDays(latestDate, -(WINDOW_DAYS - 1));
-  const [{ data: days }, { data: hrv }, { data: sleep }] = await Promise.all([
+  const [{ data: days }, { data: hrv }, { data: sleep }, { data: derived }] = await Promise.all([
     supabase
       .from("daily_summaries")
       .select(
@@ -87,7 +103,19 @@ export async function loadToday(): Promise<TodayData> {
       .gte("local_date", from)
       .lte("local_date", latestDate)
       .order("end_time", { ascending: true }),
+    supabase
+      .from("derived_daily")
+      .select("local_date, metric_code, value, confidence, components")
+      .in("metric_code", ["readiness", "ctl", "atl", "tsb", "acwr", "sleep_debt", "trimp_daily"])
+      .gte("local_date", from)
+      .lte("local_date", latestDate),
   ]);
+
+  const derivedByMetric = new Map<string, Map<string, DerivedValue>>();
+  for (const r of (derived ?? []) as Array<DerivedValue & { local_date: string; metric_code: string }>) {
+    if (!derivedByMetric.has(r.metric_code)) derivedByMetric.set(r.metric_code, new Map());
+    derivedByMetric.get(r.metric_code)!.set(r.local_date, { value: r.value, confidence: r.confidence, components: r.components });
+  }
 
   const dates = Array.from({ length: WINDOW_DAYS }, (_, i) => addDays(from, i));
   return {
@@ -97,6 +125,7 @@ export async function loadToday(): Promise<TodayData> {
     hrv: new Map((hrv as HrvDay[] | null)?.map((h) => [h.local_date, h]) ?? []),
     // If a date has two sessions, the later one (ordered by end time) wins.
     sleep: new Map((sleep as SleepNight[] | null)?.map((s) => [s.local_date, s]) ?? []),
+    derived: derivedByMetric,
     connection: connection ?? null,
   };
 }

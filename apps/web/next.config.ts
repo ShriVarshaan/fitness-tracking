@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
-  transpilePackages: ["@ft/core", "@ft/db"],
+  transpilePackages: ["@ft/core", "@ft/db", "@ft/garmin", "@ft/metrics"],
   poweredByHeader: false,
   turbopack: {
     rules: {

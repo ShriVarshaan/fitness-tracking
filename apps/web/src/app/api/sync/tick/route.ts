@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/server/db";
+import { recomputeDerived, usersMissingDerived } from "@/server/derive";
 import { processPending } from "@/server/process";
 import { runTick } from "@/server/sync";
 
@@ -21,7 +22,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const db = getDb();
-  const sync = await runTick(db, { budgetMs: 35_000 });
-  const processed = await processPending(db, { budgetMs: 15_000 });
-  return NextResponse.json({ ...sync, ...processed });
+  const sync = await runTick(db, { budgetMs: 30_000 });
+  const processed = await processPending(db, { budgetMs: 10_000 });
+
+  const toDerive = [...new Set([...processed.touchedUsers, ...(await usersMissingDerived(db))])];
+  for (const userId of toDerive.slice(0, 5)) await recomputeDerived(db, userId);
+
+  return NextResponse.json({ ...sync, processed: processed.processed, quarantined: processed.quarantined, derived: toDerive.length });
 }

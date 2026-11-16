@@ -64,6 +64,13 @@
       "when": 1794854543292,
       "tag": "20261116184223_retry_quarantined",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794855208159,
+      "tag": "20261116185328_derived_daily",
+      "breakpoints": true
     }
   ]
 }
