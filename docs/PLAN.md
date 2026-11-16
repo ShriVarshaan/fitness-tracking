@@ -187,17 +187,17 @@ All in `packages/metrics`: pure functions with golden-value tests, `algo_version
 |---|---|---|
 | HR max | 99th-percentile activity HR over 12 months; otherwise Tanaka 208 − 0.7 × age (low confidence) | Tanaka, Monahan & Seals 2001, *JACC* 37:153–156 |
 | HR zones | % of HR reserve (Karvonen) using the resting-HR baseline | Karvonen et al. 1957 |
-| Session load (HR) | Banister TRIMP per sample (sex-specific weighting); Edwards zone TRIMP if sex isn't set | Banister 1991; Morton, Fitz-Clarke & Banister 1990; Edwards 1993 |
+| Session load (HR) | Banister TRIMP per sample (sex-specific weighting) once HR streams exist (FIT files). **v1 (summary data only):** Edwards summated-zone TRIMP = Σ minutes in zone × zone number (1–5), using Garmin's per-activity HR zone times (zones as configured in Garmin). Activities without HR zone data contribute no load and are listed as missing. | Banister 1991; Morton, Fitz-Clarke & Banister 1990; Edwards 1993 |
 | Session load (no HR) | Session-RPE = CR-10 RPE × minutes | Foster et al. 2001, *JSCR* 15:109–115 |
 | Cycling load with power | TSS = (s × NP × IF) / (FTP × 3600) × 100 | Allen & Coggan |
 | Fitness / fatigue / form | CTL = EWMA(load, 42 d), ATL = EWMA(load, 7 d), TSB = CTL − ATL (previous day) | Banister impulse-response; Coggan PMC |
 | Acute:chronic ratio | EWMA-ACWR (λa = 2/8, λc = 2/29); **descriptive "load spike" only, not an injury predictor** | Williams et al. 2017; caveats Impellizzeri et al. 2020 |
 | Load focus | 4-week load split by HR zones 1–2 / 3–4 / 5, or Garmin training effect when present | Heuristic, labelled |
-| HRV baseline | ln(overnight RMSSD); 7-day mean vs 60-day baseline ± 0.5 SD; needs ≥ 14 nights | Plews et al. 2012, 2013; Buchheit 2014 |
-| Resting HR trend | 7-day mean vs 60-day baseline; elevated if > baseline + max(5 bpm, 2 SD) for ≥ 3 days | Buchheit 2014 |
-| Sleep debt | Need (default 8 h) − actual, summed over 7 days | Hirshkowitz et al. 2015; Watson et al. 2015 |
+| HRV baseline | ln(overnight RMSSD); 7-day mean (≥ 3 nights) vs 60-day baseline mean ± 0.5 SD (sample SD; window includes the 7 days); z = (7-day mean − baseline) / SD (0 if SD = 0); needs ≥ 14 nights; confidence 0.5 at 14 nights rising linearly to 1 at 30 | Plews et al. 2012, 2013; Buchheit 2014 |
+| Resting HR trend | 7-day mean (≥ 3 days) vs 60-day baseline mean and sample SD; needs ≥ 14 days (same confidence curve as HRV); elevated if > baseline + max(5 bpm, 2 SD) for ≥ 3 days | Buchheit 2014 |
+| Sleep debt | Σ over the last 7 nights of max(0, need − actual sleep); need from the profile (default 8 h); nights with no record are skipped, not counted as zero; needs ≥ 3 nights; confidence = nights / 7 | Hirshkowitz et al. 2015; Watson et al. 2015 |
 | Sleep consistency | Sleep Regularity Index, midpoint SD, social jetlag | Phillips et al. 2017; Wittmann et al. 2006 |
-| **Readiness (estimate)** | 0–100 weighted score: HRV 30%, resting HR 20%, sleep vs need 20%, regularity 10%, load 20%; weights renormalise over available inputs | Composite heuristic, unvalidated, says so |
+| **Readiness (estimate)** | 0–100 weighted mean of component scores; weights HRV 30%, resting HR 20%, sleep 20%, regularity 10%, load 20%, renormalised over available components (≥ 50% of weight required, else no score). Components: HRV = L(z of 7-day lnRMSSD); resting HR = L(−(today − baseline)/SD); sleep = clamp(100 × (actual/need − 0.5)/0.5, 0, 100); regularity = SRI (missing until sleep epochs exist); load = L(TSB/10), only when the load model's confidence ≥ 0.5. L(z) = 100 / (1 + e^(−1.5z)). Confidence = available weight × mean component confidence. | Composite heuristic informed by Plews 2013 and Buchheit 2014; **unvalidated, and says so** |
 | Intensity minutes | Moderate + 2 × vigorous vs 150 min/week | WHO 2020 (Bull et al., *BJSM* 54:1451) |
 | VO2 max if missing | Uth 15.3 × HRmax / HRrest (low confidence), or VDOT from race-like efforts | Uth et al. 2004; Daniels |
 | Race predictor | Riegel T₂ = T₁ (D₂/D₁)^1.06, cross-checked with VDOT | Riegel 1981 |
