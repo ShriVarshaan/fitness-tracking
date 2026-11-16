@@ -5,6 +5,7 @@ import { schema, type Db } from "@ft/db";
 import {
   ALL_DATA_TYPES,
   DATA_TYPES,
+  decodeActivityFile,
   exchangeKey,
   fetchJob,
   GarminAuthError,
@@ -16,11 +17,11 @@ import {
   type DataType,
   type PlannedJob,
 } from "@ft/garmin";
-import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { removeDemoData } from "./demo";
 import { deleteSecret, getSecret, secretName, setSecret } from "./secrets";
 
-const { garminConnection, rawIngest, syncJobs } = schema;
+const { activities, activityLaps, activitySets, activityStreams, garminConnection, rawIngest, syncJobs } = schema;
 
 /** Re-plan incremental jobs at most this often per user. */
 const REPLAN_EVERY_MS = 30 * 60 * 1000;
@@ -138,6 +139,7 @@ export async function runTick(db: Db, opts: TickOptions): Promise<TickResult> {
   await expireKeys(db);
   await releaseStaleLocks(db);
   await planDueIncrementals(db, opts.userId);
+  await planActivityFiles(db, opts.userId);
 
   const pausedUsers = new Set<string>();
   const maxJobs = opts.maxJobs ?? 50;
@@ -150,7 +152,7 @@ export async function runTick(db: Db, opts: TickOptions): Promise<TickResult> {
     if (!job) return result;
 
     // Data types we no longer fetch (e.g. stress, now read from daily summaries).
-    if (!(job.dataType in DATA_TYPES)) {
+    if (job.dataType !== ACTIVITY_FILE && !(job.dataType in DATA_TYPES)) {
       await db.update(syncJobs).set({ status: "done", lockedAt: null }).where(eq(syncJobs.id, job.id));
       continue;
     }
@@ -164,6 +166,12 @@ export async function runTick(db: Db, opts: TickOptions): Promise<TickResult> {
 
     try {
       const token = await accessTokenFor(db, job.userId, conn.tokenExpiresAt);
+      if (job.dataType === ACTIVITY_FILE) {
+        await fetchActivityFile(db, job, new GarminClient(token));
+        await db.update(syncJobs).set({ status: "done", lockedAt: null, error: null }).where(eq(syncJobs.id, job.id));
+        result.jobsDone++;
+        continue;
+      }
       const payloads = await fetchJob(new GarminClient(token), {
         dataType: job.dataType as DataType,
         from: toDate(job.rangeFrom),
@@ -198,12 +206,85 @@ export async function runTick(db: Db, opts: TickOptions): Promise<TickResult> {
           })
           .where(eq(syncJobs.id, job.id));
         if (giveUp) result.jobsFailed++;
+        // Don't re-plan an activity file that keeps failing (e.g. an unreadable upload).
+        if (giveUp && job.dataType === ACTIVITY_FILE && job.ref) {
+          await db
+            .update(activities)
+            .set({ fileFetchedAt: new Date() })
+            .where(and(eq(activities.userId, job.userId), eq(activities.source, "garmin"), eq(activities.sourceRecordId, job.ref)));
+        }
       }
     }
   }
 }
 
 type JobRow = typeof syncJobs.$inferSelect;
+
+const ACTIVITY_FILE = "activity_file";
+/** Activity files queued per user per tick (each is one download). */
+const FILES_PER_PLAN = 25;
+
+/** Queue a download for Garmin activities whose original file hasn't been fetched yet. */
+async function planActivityFiles(db: Db, userId?: string): Promise<void> {
+  const pending = await db
+    .select({ userId: activities.userId, id: activities.sourceRecordId, start: activities.startTime })
+    .from(activities)
+    .innerJoin(garminConnection, eq(garminConnection.userId, activities.userId))
+    .where(
+      and(
+        eq(garminConnection.status, "active"),
+        eq(activities.source, "garmin"),
+        isNull(activities.fileFetchedAt),
+        userId ? eq(activities.userId, userId) : undefined,
+      ),
+    )
+    .orderBy(desc(activities.startTime))
+    .limit(FILES_PER_PLAN);
+  if (pending.length === 0) return;
+  await db
+    .insert(syncJobs)
+    .values(
+      pending.map((a) => ({
+        userId: a.userId,
+        kind: "backfill" as const,
+        dataType: ACTIVITY_FILE,
+        ref: a.id,
+        rangeFrom: a.start,
+        rangeTo: a.start,
+      })),
+    )
+    .onConflictDoNothing();
+}
+
+/** Download, decode and store one activity's FIT file: streams, laps, sets, effort. */
+async function fetchActivityFile(db: Db, job: JobRow, client: GarminClient): Promise<void> {
+  if (!job.ref) throw new Error("activity_file job without an activity id");
+  const where = and(eq(activities.userId, job.userId), eq(activities.source, "garmin"), eq(activities.sourceRecordId, job.ref));
+  const activity = await db.query.activities.findFirst({ columns: { sport: true }, where });
+  if (!activity) return; // deleted since planning
+
+  const decoded = decodeActivityFile(await client.downloadActivity(job.ref), activity.sport);
+  const key = { userId: job.userId, source: "garmin", sourceRecordId: job.ref };
+
+  await db.transaction(async (tx) => {
+    const same = <T extends typeof activityStreams | typeof activityLaps | typeof activitySets>(t: T) =>
+      and(eq(t.userId, job.userId), eq(t.source, "garmin"), eq(t.sourceRecordId, job.ref!));
+    await tx.delete(activityStreams).where(same(activityStreams));
+    await tx.delete(activityLaps).where(same(activityLaps));
+    await tx.delete(activitySets).where(same(activitySets));
+
+    if (decoded.streams) {
+      const rows = Object.entries(decoded.streams)
+        // Skip streams with no data at all (e.g. GPS on a treadmill run).
+        .filter(([, values]) => (values as Array<number | null>).some((v) => v !== null))
+        .map(([stream, values]) => ({ ...key, stream: stream as keyof typeof decoded.streams, values: values as number[] }));
+      if (rows.length) await tx.insert(activityStreams).values(rows);
+    }
+    if (decoded.laps.length) await tx.insert(activityLaps).values(decoded.laps.map((l) => ({ ...key, ...l })));
+    if (decoded.sets.length) await tx.insert(activitySets).values(decoded.sets.map((s) => ({ ...key, ...s })));
+    await tx.update(activities).set({ fileFetchedAt: new Date(), rpe: decoded.rpe, feel: decoded.feel }).where(where);
+  });
+}
 
 /** Atomically take the next due job: incremental first, then backfill newest-first. */
 async function claimJob(db: Db, userId: string | undefined, excludeUsers: string[]): Promise<JobRow | null> {

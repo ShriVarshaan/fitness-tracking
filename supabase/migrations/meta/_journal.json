@@ -85,6 +85,13 @@
       "when": 1794856031220,
       "tag": "20261116190711_privacy_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794857029470,
+      "tag": "20261116192349_activity_files",
+      "breakpoints": true
     }
   ]
 }

@@ -3,3 +3,4 @@ export * from "./token";
 export * from "./client";
 export * from "./plan";
 export * from "./mappers";
+export * from "./fit";

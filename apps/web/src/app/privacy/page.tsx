@@ -25,9 +25,10 @@ export default function PrivacyPage() {
       <Section title="What is stored">
         Your email address and a hashed password (handled by Supabase Auth). If you connect Garmin: your Garmin Personal
         API key (encrypted in Supabase Vault) and the data Garmin returns — daily summaries (steps, heart rate, stress,
-        Body Battery, pulse ox, respiration), sleep, HRV, VO2 max, weight and activity summaries. Your name, profile
-        picture and exact activity start and end locations from Garmin are not stored. Estimates this app calculates
-        from your data are stored alongside it.
+        Body Battery, pulse ox, respiration), sleep, HRV, VO2 max, weight and activities, including each activity's
+        original file (second-by-second heart rate, pace, power, laps, strength sets and GPS route). Your name and profile
+        picture are not stored, and route points within 200 m of an activity's start and finish are removed before
+        storage. Estimates this app calculates from your data are stored alongside it.
       </Section>
 
       <Section title="Why, and the legal basis">
@@ -38,7 +39,7 @@ export default function PrivacyPage() {
 
       <Section title="Who processes it">
         Supabase (database, login and encryption, hosted in Frankfurt, EU) and Vercel (hosting; your data passes through
-        its servers when pages load). Garmin provides your data under its own terms when you add your key. No analytics
+        its servers when pages load). Garmin provides your data under its own terms when you add your key. Activity maps load map images from OpenFreeMap, which sees which map area your browser shows but not your data. No analytics
         or advertising services are used. If an optional AI feature is added later, it will be off by default and ask
         for separate consent first.
       </Section>

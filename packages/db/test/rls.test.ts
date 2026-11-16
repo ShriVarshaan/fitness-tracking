@@ -30,6 +30,11 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
   activities: (u) =>
     sql`insert into activities (user_id, sport, start_time, local_date, source_record_id) values (${u}, 'running', now(), '2026-01-01', 'a1')`,
   vo2max_daily: (u) => sql`insert into vo2max_daily (user_id, local_date, sport, value) values (${u}, '2026-01-01', 'running', 45)`,
+  activity_streams: (u) =>
+    sql`insert into activity_streams (user_id, source_record_id, stream, values) values (${u}, 'a1', 'hr', '{140,141}')`,
+  activity_laps: (u) =>
+    sql`insert into activity_laps (user_id, source_record_id, idx, start_time) values (${u}, 'a1', 0, now())`,
+  activity_sets: (u) => sql`insert into activity_sets (user_id, source_record_id, idx, reps) values (${u}, 'a1', 0, 8)`,
   derived_daily: (u) =>
     sql`insert into derived_daily (user_id, local_date, metric_code, value, algo_version, inputs_hash) values (${u}, '2026-01-01', 'readiness', 60, 1, 'h')`,
   findings: (u) =>
@@ -48,6 +53,9 @@ const SERVER_WRITE_ONLY = [
   "hrv_daily",
   "activities",
   "vo2max_daily",
+  "activity_streams",
+  "activity_laps",
+  "activity_sets",
   "derived_daily",
   "findings",
   "insights",

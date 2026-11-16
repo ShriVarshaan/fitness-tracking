@@ -75,7 +75,12 @@ export class GarminClient {
   }
   /** Original upload as ZIP bytes (contains the FIT file). */
   async downloadActivity(id: number | string): Promise<Uint8Array> {
-    const res = await this.request(`/download-service/files/activity/${assertActivityId(id)}`, undefined, "application/zip, application/octet-stream");
+    // Garmin returns 406 unless application/x-zip-compressed is acceptable (as in its own client).
+    const res = await this.request(
+      `/download-service/files/activity/${assertActivityId(id)}`,
+      undefined,
+      "application/zip, application/x-zip-compressed, application/octet-stream",
+    );
     return new Uint8Array(await res.arrayBuffer());
   }
 

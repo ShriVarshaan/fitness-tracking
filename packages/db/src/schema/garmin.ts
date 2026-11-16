@@ -45,6 +45,8 @@ export const syncJobs = pgTable(
     userId: userId(),
     kind: text("kind", { enum: ["backfill", "incremental"] }).notNull(),
     dataType: text("data_type").notNull(),
+    /** Extra job target, e.g. the Garmin activity id for "activity_file" jobs. */
+    ref: text("ref"),
     rangeFrom: timestamp("range_from", { withTimezone: true }).notNull(),
     rangeTo: timestamp("range_to", { withTimezone: true }).notNull(),
     status: text("status", { enum: ["queued", "running", "done", "failed"] })

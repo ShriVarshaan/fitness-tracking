@@ -157,6 +157,11 @@ export const activities = pgTable(
     hrZoneS: real("hr_zone_s").array(),
     lapCount: smallint("lap_count"),
     hasRoute: boolean("has_route").notNull().default(false),
+    /** Session effort (1–10) and feel (0–100) from the FIT file, when recorded on the watch. */
+    rpe: real("rpe"),
+    feel: real("feel"),
+    /** When the original activity file was fetched and decoded (null = not yet). */
+    fileFetchedAt: timestamp("file_fetched_at", { withTimezone: true }),
     ...provenance(),
   },
   (t) => [
@@ -177,4 +182,54 @@ export const vo2maxDaily = pgTable(
     ...provenance(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.localDate, t.sport, t.source] }), ownerReadPolicy("vo2max_daily")],
+).enableRLS();
+
+/** Per-second series decoded from the FIT file, one row per stream (Strava-style columnar arrays). */
+export const activityStreams = pgTable(
+  "activity_streams",
+  {
+    userId: userId(),
+    source: text("source").notNull().default("garmin"),
+    sourceRecordId: text("source_record_id").notNull(),
+    stream: text("stream", {
+      enum: ["time_s", "hr", "speed", "altitude", "cadence", "power", "distance", "lat", "lon"],
+    }).notNull(),
+    values: real("values").array().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.source, t.sourceRecordId, t.stream] }), ownerReadPolicy("activity_streams")],
+).enableRLS();
+
+export const activityLaps = pgTable(
+  "activity_laps",
+  {
+    userId: userId(),
+    source: text("source").notNull().default("garmin"),
+    sourceRecordId: text("source_record_id").notNull(),
+    idx: smallint("idx").notNull(),
+    startTime: timestamp("start_time", { withTimezone: true }).notNull(),
+    durationS: real("duration_s"),
+    distanceM: real("distance_m"),
+    avgHr: real("avg_hr"),
+    maxHr: real("max_hr"),
+    avgSpeedMps: real("avg_speed_mps"),
+    avgPowerW: real("avg_power_w"),
+    ascentM: real("ascent_m"),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.source, t.sourceRecordId, t.idx] }), ownerReadPolicy("activity_laps")],
+).enableRLS();
+
+/** Strength sets from the FIT file (active sets only). */
+export const activitySets = pgTable(
+  "activity_sets",
+  {
+    userId: userId(),
+    source: text("source").notNull().default("garmin"),
+    sourceRecordId: text("source_record_id").notNull(),
+    idx: smallint("idx").notNull(),
+    exercise: text("exercise"),
+    reps: smallint("reps"),
+    weightKg: real("weight_kg"),
+    durationS: real("duration_s"),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.source, t.sourceRecordId, t.idx] }), ownerReadPolicy("activity_sets")],
 ).enableRLS();
