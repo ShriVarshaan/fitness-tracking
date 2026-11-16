@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
 import { createClient } from "@/lib/supabase/server";
-import { DeleteAccountForm, SleepNeedForm } from "./forms";
+import { aiAvailable, aiModel } from "@/server/ai";
+import { AiWordingForm, DeleteAccountForm, SleepNeedForm } from "./forms";
 
 export const metadata: Metadata = { title: "Account" };
 export const maxDuration = 60;
@@ -11,7 +12,7 @@ export default async function AccountPage() {
   const supabase = await createClient();
   const [{ data: auth }, { data: profile }] = await Promise.all([
     supabase.auth.getClaims(),
-    supabase.from("profile").select("sleep_need_min, privacy_accepted_at, privacy_version").maybeSingle(),
+    supabase.from("profile").select("sleep_need_min, privacy_accepted_at, privacy_version, ai_enabled, ai_consented_at").maybeSingle(),
   ]);
   const email = typeof auth?.claims.email === "string" ? auth.claims.email : null;
 
@@ -27,6 +28,22 @@ export default async function AccountPage() {
         <h2 className="font-medium">Sleep need</h2>
         <p className="text-sm text-muted">Used for sleep debt and the sleep part of readiness. Most adults need 7–9 hours.</p>
         <SleepNeedForm current={profile?.sleep_need_min ?? 480} />
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
+        <h2 className="font-medium">AI wording (optional)</h2>
+        <p className="text-sm text-muted">
+          Your morning summary is always worked out by fixed rules from your numbers. If you turn this on, an AI model
+          rewrites the wording only. Its text is checked against your numbers before it&rsquo;s shown, and the standard
+          wording is used if it fails. Health warnings are never sent to the model. It&rsquo;s off by default.
+        </p>
+        <p className="text-sm">
+          Currently: <strong className="font-semibold">{profile?.ai_enabled ? "on" : "off"}</strong>
+          {profile?.ai_enabled && profile.ai_consented_at && (
+            <span className="text-muted"> (since {new Date(profile.ai_consented_at).toLocaleDateString("en-GB")})</span>
+          )}
+        </p>
+        <AiWordingForm enabled={Boolean(profile?.ai_enabled)} available={aiAvailable()} model={aiModel()} />
       </section>
 
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">

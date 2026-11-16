@@ -51,6 +51,12 @@ export function InsightCard({ insight }: { insight: Insight }) {
         </div>
       )}
 
+      {insight.model !== "template" && (
+        <p className="text-xs text-muted">
+          Worded by AI ({insight.model}) from the rules&rsquo; findings, and checked against your numbers.
+        </p>
+      )}
+
       {insight.missingData.length > 0 && (
         <ul className="space-y-0.5 text-xs text-muted">
           {insight.missingData.map((m) => (

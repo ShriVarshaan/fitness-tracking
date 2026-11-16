@@ -15,6 +15,8 @@ export const profile = pgTable(
     units: text("units", { enum: ["metric", "imperial"] }).notNull().default("metric"),
     sleepNeedMin: integer("sleep_need_min").notNull().default(480),
     aiEnabled: boolean("ai_enabled").notNull().default(false),
+    /** When the user opted in to AI wording (separate consent; null when off). */
+    aiConsentedAt: timestamp("ai_consented_at", { withTimezone: true }),
     /** Explicit consent to processing health data, against a privacy-notice version. */
     privacyAcceptedAt: timestamp("privacy_accepted_at", { withTimezone: true }),
     privacyVersion: text("privacy_version"),

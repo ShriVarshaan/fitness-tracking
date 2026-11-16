@@ -1,0 +1,1 @@
+ALTER TABLE "profile" ADD COLUMN "ai_consented_at" timestamp with time zone;

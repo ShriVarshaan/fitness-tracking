@@ -1,7 +1,8 @@
 import "server-only";
-import { morningInsight, validateInsight } from "@ft/advice";
+import { morningInsight, rewordInsight, rewordKey, validateInsight, type Insight } from "@ft/advice";
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
+import { aiModel, groqGenerate } from "./ai";
 import { ALGO_VERSION, buildRuleContext, deriveAll, evaluateRules, type DeriveInputs, type DerivedRow } from "@ft/metrics";
 import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 
@@ -160,12 +161,13 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
   const today = perDay.at(-1)!;
   const has = (list: Array<{ date: string }>) => list.some((p) => p.date === latest);
   const hrvToday = rows.find((r) => r.localDate === latest && r.metricCode === "hrv_baseline");
-  const insight = morningInsight(latest, today.found, {
+  const template = morningInsight(latest, today.found, {
     sleepLastNight: has(inputs.sleep),
     hrvLastNight: has(inputs.hrv),
     restingHrToday: has(inputs.rhr),
     baselineReason: hrvToday?.value === null ? String(hrvToday.components.reason ?? "") || null : null,
   });
+  const { insight, rewordKey: key, fallback } = await maybeReword(db, userId, latest, template);
   const check = validateInsight(insight);
 
   await db
@@ -174,7 +176,7 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
       userId,
       kind: "morning",
       forDate: latest,
-      body: insight as unknown as Record<string, unknown>,
+      body: { ...insight, rewordKey: key, aiFallback: fallback } as unknown as Record<string, unknown>,
       ruleIds: insight.ruleIds,
       model: insight.model,
       validatorOk: check.ok,
@@ -183,6 +185,42 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
       target: [insights.userId, insights.kind, insights.forDate],
       set: { body: sql`excluded.body`, ruleIds: sql`excluded.rule_ids`, model: sql`excluded.model`, validatorOk: sql`excluded.validator_ok`, createdAt: sql`now()` },
     });
+}
+
+/**
+ * Optional AI wording for users who opted in, when the server has a Groq key.
+ * The same template (same rewordKey) is never sent twice: the stored wording is
+ * reused, so frequent syncs don't spend the free quota.
+ */
+async function maybeReword(
+  db: Db,
+  userId: string,
+  forDate: string,
+  template: Insight,
+): Promise<{ insight: Insight; rewordKey: string | null; fallback: string | null }> {
+  const generate = groqGenerate();
+  if (!generate) return { insight: template, rewordKey: null, fallback: null };
+  const prof = await db.query.profile.findFirst({ columns: { aiEnabled: true }, where: eq(profile.userId, userId) });
+  if (!prof?.aiEnabled) return { insight: template, rewordKey: null, fallback: null };
+
+  const key = rewordKey(template);
+  const existing = await db.query.insights.findFirst({
+    columns: { body: true, model: true },
+    where: and(eq(insights.userId, userId), eq(insights.kind, "morning"), eq(insights.forDate, forDate)),
+  });
+  if (existing && existing.body.rewordKey === key) {
+    return {
+      insight: existing.body as unknown as Insight,
+      rewordKey: key,
+      fallback: (existing.body.aiFallback as string | null) ?? null,
+    };
+  }
+
+  const outcome = await rewordInsight(template, generate, aiModel());
+  if (outcome.status === "template" && outcome.reason !== "red_flag" && outcome.reason !== "no_findings") {
+    console.warn(`AI wording fell back to template (${outcome.reason}): ${outcome.detail ?? ""}`);
+  }
+  return { insight: outcome.insight, rewordKey: key, fallback: outcome.status === "template" ? outcome.reason : null };
 }
 
 /**

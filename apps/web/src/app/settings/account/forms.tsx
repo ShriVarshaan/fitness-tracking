@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { deleteAccount, saveSleepNeed, type FormState } from "./actions";
+import { deleteAccount, saveSleepNeed, setAiWording, type FormState } from "./actions";
 
 const initial: FormState = { status: "idle" };
 const field =
@@ -30,6 +30,37 @@ export function SleepNeedForm({ current }: { current: number }) {
         {pending ? "Saving…" : "Save"}
       </button>
       <p role="status" aria-live="polite" className={`basis-full text-sm ${state.status === "error" ? "text-danger" : "text-muted"}`}>
+        {state.message}
+      </p>
+    </form>
+  );
+}
+
+export function AiWordingForm({ enabled, available, model }: { enabled: boolean; available: boolean; model: string }) {
+  const [state, action, pending] = useActionState(setAiWording, initial);
+  if (!available) {
+    return <p className="text-sm text-muted">Not available on this server (no AI provider is configured).</p>;
+  }
+  return (
+    <form action={action} className="space-y-3">
+      <input type="hidden" name="enable" value={enabled ? "0" : "1"} />
+      {!enabled && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="consent" required className="mt-1 size-4 accent-accent" />
+          <span>
+            I agree to the numbers behind my morning summary (for example HRV, resting heart rate and sleep duration,
+            with no name or email) being sent to Groq, a US company, so its model ({model}) can reword the summary.
+          </span>
+        </label>
+      )}
+      <button
+        type="submit"
+        disabled={pending}
+        className={`rounded-md px-3 py-2 text-sm font-medium disabled:opacity-60 ${enabled ? "border border-border" : "bg-accent text-accent-fg"}`}
+      >
+        {pending ? "Saving…" : enabled ? "Turn AI wording off" : "Turn AI wording on"}
+      </button>
+      <p role="status" aria-live="polite" className={`text-sm ${state.status === "error" ? "text-danger" : "text-muted"}`}>
         {state.message}
       </p>
     </form>

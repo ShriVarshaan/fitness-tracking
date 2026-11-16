@@ -92,6 +92,13 @@
       "when": 1794857029470,
       "tag": "20261116192349_activity_files",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794858529583,
+      "tag": "20261116194849_ai_consent",
+      "breakpoints": true
     }
   ]
 }
