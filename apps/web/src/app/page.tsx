@@ -69,6 +69,8 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
   const steps = series((d) => data.days.get(d)?.steps);
   const rhr7 = mean(rhr.slice(-7));
   const sleep7 = mean(sleep.slice(-7));
+  const bodyBattery = series((d) => data.days.get(d)?.body_battery_high);
+  const hrvLast = hrvToday?.last_night_avg_ms ?? null;
   const band =
     hrvToday?.baseline_balanced_low_ms != null && hrvToday.baseline_balanced_upper_ms != null
       ? { low: hrvToday.baseline_balanced_low_ms, high: hrvToday.baseline_balanced_upper_ms }
@@ -83,8 +85,15 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
           <Big value={formatNumber(hrvToday?.last_night_avg_ms)} unit="ms" />
           <p className="text-sm text-muted">
             {band ? `Usual range ${formatNumber(band.low)}–${formatNumber(band.high)} ms` : "No baseline yet"}
-            {hrvToday?.source_status && ` · ${titleCase(hrvToday.source_status)}`}
+            {band && hrvLast != null && hrvLast < band.low && <span className="text-foreground"> · last night below range</span>}
+            {band && hrvLast != null && hrvLast > band.high && <span className="text-foreground"> · last night above range</span>}
           </p>
+          {hrvToday?.source_status && (
+            <p className="text-sm text-muted">
+              Status {titleCase(hrvToday.source_status)}, based on the 7-day average of{" "}
+              {formatNumber(hrvToday.weekly_avg_ms)} ms
+            </p>
+          )}
           <Sparkline values={hrv} band={band} label="Overnight HRV, last 30 days, with Garmin's usual range shaded" />
         </Card>
 
@@ -97,6 +106,7 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
         <Card title="Body Battery" badge="Garmin">
           <Big value={`${formatNumber(today?.body_battery_low)}–${formatNumber(today?.body_battery_high)}`} />
           <p className="text-sm text-muted">Lowest and highest today · stress avg {formatNumber(today?.stress_avg)}</p>
+          <Sparkline values={bodyBattery} label="Daily Body Battery high, last 30 days" />
         </Card>
 
         <Card title="Steps">

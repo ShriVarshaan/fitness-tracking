@@ -60,7 +60,16 @@ export function Sparkline({
       {segments.map((d, i) => (
         <path key={i} d={d} fill="none" className="stroke-accent" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
       ))}
-      {last != null && <circle cx={x(lastIndex)} cy={y(last)} r={2.5} className="fill-accent" />}
+      {/* A zero-length round-capped line stays circular even though the SVG stretches to fit. */}
+      {last != null && (
+        <path
+          d={`M${x(lastIndex).toFixed(1)},${y(last).toFixed(1)}h0`}
+          className="stroke-accent"
+          strokeWidth={6}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
     </svg>
   );
 }
