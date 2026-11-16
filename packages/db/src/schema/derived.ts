@@ -1,4 +1,4 @@
-import { boolean, date, jsonb, pgTable, primaryKey, real, smallint, text, timestamp } from "drizzle-orm/pg-core";
+import { bigserial, boolean, date, index, jsonb, pgTable, primaryKey, real, smallint, text, timestamp } from "drizzle-orm/pg-core";
 import { ownerReadPolicy, userId } from "./_shared";
 
 /**
@@ -51,4 +51,21 @@ export const insights = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.forDate] }), ownerReadPolicy("insights")],
+).enableRLS();
+
+/** Chat history: questions, answers, which read-only tools were used and whether numbers were verified. */
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: userId(),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    toolsUsed: text("tools_used").array().notNull().default([]),
+    /** Assistant only: every number traced to tool results (null for user messages and fixed replies). */
+    grounded: boolean("grounded"),
+    model: text("model"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("chat_messages_user_created_idx").on(t.userId, t.createdAt), ownerReadPolicy("chat_messages")],
 ).enableRLS();

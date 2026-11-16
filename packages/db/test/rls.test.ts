@@ -39,6 +39,7 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
     sql`insert into derived_daily (user_id, local_date, metric_code, value, algo_version, inputs_hash) values (${u}, '2026-01-01', 'readiness', 60, 1, 'h')`,
   findings: (u) =>
     sql`insert into findings (user_id, local_date, rule_id, rule_version, severity, confidence, evidence) values (${u}, '2026-01-01', 'R', 1, 'info', 1, '[]'::jsonb)`,
+  chat_messages: (u) => sql`insert into chat_messages (user_id, role, content) values (${u}, 'user', 'hello')`,
   insights: (u) =>
     sql`insert into insights (user_id, kind, for_date, body, rule_ids, model, validator_ok) values (${u}, 'morning', '2026-01-01', '{}'::jsonb, '{}', 'template', true)`,
 };
@@ -59,6 +60,7 @@ const SERVER_WRITE_ONLY = [
   "derived_daily",
   "findings",
   "insights",
+  "chat_messages",
 ];
 
 /** Run `fn` as a PostgREST role inside a transaction that is always rolled back. */
@@ -168,5 +170,15 @@ describe("secrets", () => {
 
   it("users cannot read Vault directly", async () => {
     await expect(as("authenticated", A, (tx) => tx`select * from vault.decrypted_secrets`)).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("data export coverage", () => {
+  it("exports every table that holds user data", async () => {
+    const { EXPORT_TABLES } = await import("../../../apps/web/src/lib/export-tables");
+    const rows = await sql`
+      select table_name from information_schema.columns
+      where table_schema = 'public' and column_name = 'user_id'`;
+    expect([...EXPORT_TABLES].sort()).toEqual(rows.map((r) => r.table_name as string).sort());
   });
 });

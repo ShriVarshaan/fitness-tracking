@@ -1,0 +1,150 @@
+import { groq } from "@ai-sdk/groq";
+import { isRedFlagMessage, SAFETY_REPLY, safetyViolations, stripMarkdown, ungroundedChatNumbers } from "@ft/advice";
+import { schema } from "@ft/db";
+import { generateText, isStepCount, type ModelMessage } from "ai";
+import { and, eq, gte, sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { aiAvailable } from "@/server/ai";
+import { chatTools } from "@/server/chat-tools";
+import { getDb } from "@/server/db";
+
+export const maxDuration = 60;
+
+const MESSAGES_PER_HOUR = 30;
+const DEFAULT_CHAT_MODEL = "openai/gpt-oss-120b";
+
+const body = z.object({
+  message: z.string().trim().min(1).max(1000),
+  history: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
+    .max(10)
+    .default([]),
+});
+
+function systemPrompt(today: string, latest: string | null): string {
+  return [
+    "You answer questions about one person's own fitness, sleep and recovery data from their Garmin watch.",
+    `Today is ${today}. Their most recent data is from ${latest ?? "an unknown date"}.`,
+    "Always call the tools to get data; never guess or use outside knowledge about their numbers.",
+    "Every number you state must come from a tool result: copy values or display strings exactly; don't calculate new averages, differences or percentages yourself (the tools provide them).",
+    "Say plainly when data is missing or a question can't be answered from the data.",
+    "Values labelled 'our estimate' are this app's calculations, not Garmin's metrics; say so when you use them.",
+    "Keep answers short: 2-5 sentences, plain British English, plain text with no markdown or tables.",
+    "Never diagnose, never suggest medication, supplements or diets. This is general wellness information, not medical advice.",
+  ].join("\n");
+}
+
+/** The last step's text only: earlier steps may contain preambles written alongside tool calls. */
+function finalText(result: { text: string; steps: Array<{ text: string }> }): string {
+  return result.steps.at(-1)?.text ?? result.text;
+}
+
+type Reply = { answer: string; grounded: boolean | null; toolsUsed: string[]; model: string | null };
+
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims.sub;
+  if (typeof userId !== "string") return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const parsed = body.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Send a message of up to 1000 characters." }, { status: 400 });
+  const { message, history } = parsed.data;
+
+  if (!aiAvailable()) return NextResponse.json({ error: "Chat isn't available on this server." }, { status: 503 });
+  const db = getDb();
+  const prof = await db.query.profile.findFirst({ columns: { aiEnabled: true }, where: eq(schema.profile.userId, userId) });
+  if (prof && !prof.aiEnabled) {
+    return NextResponse.json({ error: "Chat uses AI, which is turned off for your account. You can turn it on in Account." }, { status: 403 });
+  }
+
+  // Per-user rate limit protects the shared free quota.
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.chatMessages)
+    .where(
+      and(
+        eq(schema.chatMessages.userId, userId),
+        eq(schema.chatMessages.role, "user"),
+        gte(schema.chatMessages.createdAt, new Date(Date.now() - 3_600_000)),
+      ),
+    );
+  if (n >= MESSAGES_PER_HOUR) {
+    return NextResponse.json({ error: `You've reached ${MESSAGES_PER_HOUR} messages this hour. Try again later.` }, { status: 429 });
+  }
+
+  const save = async (reply: Reply) => {
+    await db.insert(schema.chatMessages).values([
+      { userId, role: "user", content: message },
+      { userId, role: "assistant", content: reply.answer, toolsUsed: reply.toolsUsed, grounded: reply.grounded, model: reply.model },
+    ]);
+    return NextResponse.json(reply);
+  };
+
+  // Possible emergencies get a fixed reply; the model never sees them.
+  if (isRedFlagMessage(message)) return save({ answer: SAFETY_REPLY, grounded: null, toolsUsed: [], model: null });
+
+  const { data: latest } = await supabase.from("daily_summaries").select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle();
+  const model = process.env.GROQ_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
+  const tools = chatTools(supabase);
+  const messages: ModelMessage[] = [...history.map((h) => ({ role: h.role, content: h.content }) as ModelMessage), { role: "user", content: message }];
+
+  const ask = (msgs: ModelMessage[]) =>
+    generateText({
+      model: groq(model),
+      system: systemPrompt(new Date().toISOString().slice(0, 10), (latest?.local_date as string | undefined) ?? null),
+      messages: msgs,
+      tools,
+      stopWhen: isStepCount(6),
+      maxRetries: 0,
+      temperature: 0.2,
+      abortSignal: AbortSignal.timeout(45_000),
+      providerOptions: { groq: { reasoningEffort: "low", reasoningFormat: "hidden" } },
+    });
+
+  try {
+    let result = await ask(messages);
+    let toolOutputs = result.steps.flatMap((s) => s.toolResults.map((r) => r.output));
+    let toolsUsed = [...new Set(result.steps.flatMap((s) => s.toolResults.map((r) => r.toolName)))];
+    let ungrounded = ungroundedChatNumbers(finalText(result), toolOutputs, message);
+
+    // One retry with feedback if a number can't be traced to the data.
+    if (ungrounded.length) {
+      result = await ask([
+        ...messages,
+        { role: "assistant", content: finalText(result) },
+        {
+          role: "user",
+          content: `These numbers in your answer don't appear in the tool results: ${ungrounded.join(", ")}. Answer again using only numbers that the tools return (call them again if needed).`,
+        },
+      ]);
+      toolOutputs = [...toolOutputs, ...result.steps.flatMap((s) => s.toolResults.map((r) => r.output))];
+      toolsUsed = [...new Set([...toolsUsed, ...result.steps.flatMap((s) => s.toolResults.map((r) => r.toolName))])];
+      ungrounded = ungroundedChatNumbers(finalText(result), toolOutputs, message);
+    }
+
+    const text = stripMarkdown(finalText(result));
+    if (!text || safetyViolations(text).length) {
+      return save({ answer: "I couldn't produce a safe answer to that. Try asking about a specific metric and date range.", grounded: null, toolsUsed, model });
+    }
+    if (ungrounded.length) {
+      return save({
+        answer: "I couldn't check every number in my answer against your data, so I won't show it. Try a narrower question, for example a single metric and date range.",
+        grounded: false,
+        toolsUsed,
+        model,
+      });
+    }
+    return save({ answer: text, grounded: true, toolsUsed, model });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("chat failed:", msg.slice(0, 300));
+    const limited = /rate limit|429/i.test(msg);
+    return NextResponse.json(
+      { error: limited ? "The free AI quota is busy right now. Try again in a minute." : "Something went wrong answering that. Try again." },
+      { status: limited ? 429 : 502 },
+    );
+  }
+}

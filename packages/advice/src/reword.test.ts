@@ -85,6 +85,14 @@ describe("rewordInsight", () => {
     expect(out.status).toBe("template");
   });
 
+  it("treats a provider schema rejection as invalid output and retries", async () => {
+    const generate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Generated JSON does not match the expected schema"))
+      .mockResolvedValueOnce(good);
+    expect(await rewordInsight(template, generate, "m")).toMatchObject({ status: "reworded", attempts: 2 });
+  });
+
   it("falls back on provider errors without retrying", async () => {
     const generate = vi.fn(async () => {
       throw new Error("429 rate limited");

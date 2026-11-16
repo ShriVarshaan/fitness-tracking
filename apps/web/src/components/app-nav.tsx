@@ -5,6 +5,7 @@ const LINKS = [
   { href: "/", label: "Today" },
   { href: "/week", label: "Week" },
   { href: "/activities", label: "Activities" },
+  { href: "/chat", label: "Chat" },
   { href: "/settings/garmin", label: "Garmin" },
   { href: "/settings/security", label: "Security" },
   { href: "/settings/account", label: "Account" },

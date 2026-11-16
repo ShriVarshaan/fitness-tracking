@@ -1,23 +1,6 @@
 import { NextResponse } from "next/server";
+import { EXPORT_TABLES as TABLES } from "@/lib/export-tables";
 import { createClient } from "@/lib/supabase/server";
-
-// Everything stored for the signed-in user, as one JSON file.
-// Reads go through the user's own session, so RLS returns only their rows.
-const TABLES = [
-  "profile",
-  "user_physiology",
-  "garmin_connection",
-  "daily_summaries",
-  "sleep_sessions",
-  "hrv_daily",
-  "vo2max_daily",
-  "activities",
-  "derived_daily",
-  "findings",
-  "insights",
-  "sync_jobs",
-  "raw_ingest",
-] as const;
 
 const PAGE = 1000; // Supabase's default maximum rows per request
 

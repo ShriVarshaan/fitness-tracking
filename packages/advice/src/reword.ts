@@ -13,7 +13,7 @@ import { validateInsight, type ValidationResult } from "./validate";
 
 export const rewordSchema = z.object({
   headline: z.string().min(3).max(80),
-  body: z.array(z.string().min(3).max(400)).min(1).max(4),
+  body: z.array(z.string().min(3).max(400)).min(1).max(8),
   actions: z
     .array(z.object({ text: z.string().min(3).max(200), evidenceIds: z.array(z.string()).min(1) }))
     .max(4),
@@ -34,7 +34,7 @@ const SYSTEM = [
   "- Use only the facts and numbers in the evidence list. Write every number exactly as it appears there. Do not add, round, convert or estimate any other number.",
   "- Keep every point from the draft; do not add new advice, causes, diagnoses, medicines, supplements or diets.",
   "- Each action must list the ids of the evidence it relies on.",
-  "- Plain British English, second person, no exclamation marks, at most 4 short paragraphs.",
+  "- Plain British English, second person, no exclamation marks, no markdown. Keep one paragraph per draft paragraph (at most 8).",
   "- This is general wellness information, not medical advice.",
 ].join("\n");
 
@@ -94,7 +94,13 @@ export async function rewordInsight(template: Insight, generate: Generate, model
     try {
       raw = await generate(req);
     } catch (err) {
-      return { status: "template", insight: template, reason: "error", attempts: attempt, detail: err instanceof Error ? err.message : "error" };
+      const message = err instanceof Error ? err.message : "error";
+      // The provider rejecting malformed output is the model's mistake, not an outage: count it as invalid.
+      if (/schema|does not validate|failed_generation/i.test(message)) {
+        detail = "output did not match the schema";
+        continue;
+      }
+      return { status: "template", insight: template, reason: "error", attempts: attempt, detail: message };
     }
     const parsed = rewordSchema.safeParse(raw);
     if (!parsed.success) {
