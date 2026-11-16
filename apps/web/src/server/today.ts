@@ -59,6 +59,8 @@ export interface TodayData {
   derived: Map<string, Map<string, DerivedValue>>;
   /** Latest morning insight, if it passed validation. */
   insight: Insight | null;
+  /** True when the data shown is synthetic demo data. */
+  isDemo: boolean;
   connection: { status: string; key_expires_on: string | null; backfill_complete: boolean } | null;
 }
 
@@ -67,7 +69,7 @@ export async function loadToday(): Promise<TodayData> {
   const supabase = await createClient();
 
   const [{ data: latest }, { data: connection }] = await Promise.all([
-    supabase.from("daily_summaries").select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("daily_summaries").select("local_date, source").order("local_date", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("garmin_connection").select("status, key_expires_on, backfill_complete").maybeSingle(),
   ]);
 
@@ -81,6 +83,7 @@ export async function loadToday(): Promise<TodayData> {
       sleep: new Map(),
       derived: new Map(),
       insight: null,
+      isDemo: false,
       connection: connection ?? null,
     };
   }
@@ -139,6 +142,7 @@ export async function loadToday(): Promise<TodayData> {
     derived: derivedByMetric,
     // Only show insights that passed the hard checks.
     insight: insightRow?.validator_ok ? (insightRow.body as Insight) : null,
+    isDemo: latest?.source === "demo",
     connection: connection ?? null,
   };
 }

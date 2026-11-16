@@ -6,6 +6,8 @@ import { Sparkline } from "@/components/sparkline";
 import { formatDay, formatDuration, formatKm, formatNumber, mean, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { loadToday, type DerivedValue, type SleepNight } from "@/server/today";
+import { loadDemo, removeDemo } from "./demo-actions";
+import { PendingButton } from "./settings/garmin/pending-button";
 
 export default async function TodayPage() {
   const supabase = await createClient();
@@ -24,6 +26,18 @@ export default async function TodayPage() {
           </p>
         </div>
       </header>
+
+      {data.isDemo && (
+        <section role="note" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/50 bg-accent/10 p-4">
+          <p className="text-sm">
+            <strong className="font-semibold">Demo data.</strong> Everything here is made up, so you can see how the app works.
+            Connecting Garmin replaces it with your own data.
+          </p>
+          <form action={removeDemo}>
+            <PendingButton idle="Remove demo data" pending="Removing…" variant="danger" />
+          </form>
+        </section>
+      )}
 
       {data.latestDate ? <Dashboard data={data} /> : <EmptyState connected={data.connection?.status === "active"} />}
 
@@ -47,6 +61,18 @@ function EmptyState({ connected }: { connected: boolean }) {
       <Link href="/settings/garmin" className="mt-3 inline-block text-sm font-medium underline">
         Garmin settings
       </Link>
+      {!connected && (
+        <div className="mt-5 space-y-2 border-t border-border pt-4">
+          <h3 className="text-sm font-medium">No Garmin watch? Try it with demo data</h3>
+          <p className="text-sm text-muted">
+            Loads 120 days of made-up sleep, HRV, heart rate and training, including one rough week, so every page
+            has something to show. You can remove it at any time.
+          </p>
+          <form action={loadDemo}>
+            <PendingButton idle="Load demo data" pending="Loading…" />
+          </form>
+        </div>
+      )}
     </section>
   );
 }

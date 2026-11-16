@@ -17,6 +17,7 @@ import {
   type PlannedJob,
 } from "@ft/garmin";
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { removeDemoData } from "./demo";
 import { deleteSecret, getSecret, secretName, setSecret } from "./secrets";
 
 const { garminConnection, rawIngest, syncJobs } = schema;
@@ -50,6 +51,8 @@ export async function connectGarmin(db: Db, userId: string, apiKey: string, keyE
 
   await setSecret(db, secretName.apiKey(userId), apiKey.trim());
   await setSecret(db, secretName.accessToken(userId), token.token);
+  // Real data replaces demo data; the two are never mixed.
+  await removeDemoData(db, userId);
 
   await db
     .insert(garminConnection)

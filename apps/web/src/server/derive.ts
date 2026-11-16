@@ -3,7 +3,7 @@ import { morningInsight, validateInsight } from "@ft/advice";
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import { buildRuleContext, deriveAll, evaluateRules, type DeriveInputs, type DerivedRow } from "@ft/metrics";
-import { and, asc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, lt, or, sql } from "drizzle-orm";
 
 const { activities, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
 
@@ -141,10 +141,32 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
     });
 }
 
+/**
+ * Remove derived rows, findings and insights outside the new data range, e.g.
+ * after demo data is removed or replaced by real data. With no data, removes all.
+ */
+async function dropStale(db: Db, userId: string, rows: DerivedRow[]): Promise<void> {
+  const dates = rows.map((r) => r.localDate).sort();
+  const first = dates[0];
+  const last = dates.at(-1);
+  await db.transaction(async (tx) => {
+    if (!first || !last) {
+      await tx.delete(derivedDaily).where(eq(derivedDaily.userId, userId));
+      await tx.delete(findings).where(eq(findings.userId, userId));
+      await tx.delete(insights).where(eq(insights.userId, userId));
+      return;
+    }
+    await tx.delete(derivedDaily).where(and(eq(derivedDaily.userId, userId), or(lt(derivedDaily.localDate, first), gt(derivedDaily.localDate, last))));
+    await tx.delete(findings).where(and(eq(findings.userId, userId), or(lt(findings.localDate, first), gt(findings.localDate, last))));
+    await tx.delete(insights).where(and(eq(insights.userId, userId), gt(insights.forDate, last)));
+  });
+}
+
 /** Recompute derived metrics, findings and the morning insight for one user. */
 export async function recomputeDerived(db: Db, userId: string): Promise<number> {
   const inputs = await loadInputs(db, userId);
   const rows = deriveAll(inputs);
+  await dropStale(db, userId, rows);
   await storeDerived(db, userId, rows);
   await storeFindingsAndInsight(db, userId, inputs, rows);
   return rows.length;
