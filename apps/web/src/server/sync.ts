@@ -15,7 +15,7 @@ import {
   type DataType,
   type PlannedJob,
 } from "@ft/garmin";
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { deleteSecret, getSecret, secretName, setSecret } from "./secrets";
 
 const { garminConnection, rawIngest, syncJobs } = schema;
@@ -267,7 +267,7 @@ async function planDueIncrementals(db: Db, userId?: string): Promise<void> {
     where: and(
       eq(garminConnection.status, "active"),
       userId ? eq(garminConnection.userId, userId) : undefined,
-      sql`(${garminConnection.lastPlannedAt} is null or ${garminConnection.lastPlannedAt} < ${cutoff})`,
+      or(isNull(garminConnection.lastPlannedAt), lt(garminConnection.lastPlannedAt, cutoff)),
     ),
   });
   for (const conn of due) {
