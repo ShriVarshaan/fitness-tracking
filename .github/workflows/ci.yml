@@ -33,3 +33,18 @@ jobs:
             echo "Server-only variable name found in client bundle" >&2
             exit 1
           fi
+
+  rls:
+    name: Database security (RLS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase (database, auth, REST only) and apply migrations
+        run: pnpm exec supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,realtime,mailpit,postgres-meta,supavisor
+      - run: pnpm test:rls

@@ -15,7 +15,9 @@
     "test:watch": "vitest",
     "db:generate": "pnpm --filter @ft/db generate",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
-    "sync:secrets": "node --experimental-strip-types scripts/set-sync-secrets.ts"
+    "sync:secrets": "node --experimental-strip-types scripts/set-sync-secrets.ts",
+    "test:rls": "vitest run --config vitest.rls.config.ts",
+    "db:local:reset": "supabase db reset --local"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
