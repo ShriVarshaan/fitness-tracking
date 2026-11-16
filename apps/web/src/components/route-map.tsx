@@ -15,10 +15,14 @@ export function RouteMap({ coordinates }: { coordinates: Array<[number, number]>
     if (!container.current || coordinates.length < 2) return;
     let map: import("maplibre-gl").Map | undefined;
     let cancelled = false;
+    let loaded = false;
 
     import("maplibre-gl")
-      .then(({ Map, LngLatBounds }) => {
+      .then(({ Map, LngLatBounds, getVersion, setWorkerUrl }) => {
         if (cancelled || !container.current) return;
+        // Bundling breaks MapLibre's own worker lookup; scripts/copy-maplibre-worker.mjs serves it here.
+        setWorkerUrl(`/maplibre/maplibre-gl-worker-${getVersion()}.mjs`);
+
         const bounds = coordinates.reduce((b, c) => b.extend(c), new LngLatBounds(coordinates[0], coordinates[0]));
         const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
         map = new Map({
@@ -29,8 +33,16 @@ export function RouteMap({ coordinates }: { coordinates: Array<[number, number]>
           attributionControl: { compact: true },
           cooperativeGestures: true,
         });
-        map.on("error", () => setFailed(true));
+
+        // A missing tile or icon also raises "error" but the map still works:
+        // only give up if the map never finishes loading.
+        map.on("error", (e) => {
+          console.warn("map:", e.error?.message ?? e);
+          if (!loaded) setFailed(true);
+        });
         map.on("load", () => {
+          loaded = true;
+          setFailed(false);
           map!.addSource("route", {
             type: "geojson",
             data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } },
@@ -44,7 +56,10 @@ export function RouteMap({ coordinates }: { coordinates: Array<[number, number]>
           });
         });
       })
-      .catch(() => setFailed(true));
+      .catch((err) => {
+        console.warn("map:", err);
+        setFailed(true);
+      });
 
     return () => {
       cancelled = true;
@@ -52,6 +67,14 @@ export function RouteMap({ coordinates }: { coordinates: Array<[number, number]>
     };
   }, [coordinates]);
 
-  if (failed) return <p className="text-sm text-muted">The map couldn&rsquo;t load.</p>;
-  return <div ref={container} className="h-72 w-full overflow-hidden rounded-lg border border-border" role="img" aria-label="Map of the route" />;
+  return (
+    <div className="relative">
+      <div ref={container} className="h-72 w-full overflow-hidden rounded-lg border border-border" role="img" aria-label="Map of the route" />
+      {failed && (
+        <p className="absolute inset-0 flex items-center justify-center rounded-lg bg-surface text-sm text-muted">
+          The map couldn&rsquo;t load.
+        </p>
+      )}
+    </div>
+  );
 }
