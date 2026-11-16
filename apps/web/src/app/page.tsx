@@ -1,11 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AppNav } from "@/components/app-nav";
 import { InsightCard } from "@/components/insight-card";
 import { Sparkline } from "@/components/sparkline";
 import { formatDay, formatDuration, formatKm, formatNumber, mean, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 import { loadToday, type DerivedValue, type SleepNight } from "@/server/today";
-import { SignOutButton } from "./sign-out-button";
 
 export default async function TodayPage() {
   const supabase = await createClient();
@@ -14,21 +14,15 @@ export default async function TodayPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-8 sm:py-10">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <div>
+      <header className="space-y-3">
+        <AppNav current="/" />
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Today</h1>
-          {data.latestDate && <p className="text-sm text-muted">Latest data: {formatDay(data.latestDate)}</p>}
+          <p className="min-w-0 truncate text-sm text-muted">
+            {data.latestDate && <>Latest data: {formatDay(data.latestDate)} · </>}
+            {email}
+          </p>
         </div>
-        <nav className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-          <span className="truncate">{email}</span>
-          <Link href="/settings/garmin" className="underline">
-            Garmin
-          </Link>
-          <Link href="/settings/security" className="underline">
-            Security
-          </Link>
-          <SignOutButton />
-        </nav>
       </header>
 
       {data.latestDate ? <Dashboard data={data} /> : <EmptyState connected={data.connection?.status === "active"} />}
