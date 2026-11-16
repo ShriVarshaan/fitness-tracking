@@ -42,6 +42,18 @@ export function LoginForm() {
           className="w-full rounded-md border border-border bg-surface px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-accent"
         />
         {isSignUp && <p className="text-xs text-muted">At least 8 characters.</p>}
+        {isSignUp && (
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="consent" required className="mt-1 size-4 accent-accent" />
+            <span>
+              I agree to this app storing and processing my health data from Garmin, as described in the{" "}
+              <a href="/privacy" target="_blank" className="underline">
+                privacy notice
+              </a>
+              .
+            </span>
+          </label>
+        )}
         <button
           type="submit"
           disabled={pending}

@@ -10,6 +10,7 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/login")).toBe(true);
     expect(isPublicPath("/auth/callback")).toBe(true);
     expect(isPublicPath("/api/sync/tick")).toBe(true);
+    expect(isPublicPath("/privacy")).toBe(true);
   });
 
   it("does not match look-alike paths", () => {

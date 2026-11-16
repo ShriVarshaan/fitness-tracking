@@ -15,7 +15,7 @@ export type GateResult =
   | { action: "redirect"; to: "/login" | "/mfa" | "/" }
   | { action: "deny" };
 
-const PUBLIC_PREFIXES = ["/login", "/auth/", "/api/sync/tick"];
+const PUBLIC_PREFIXES = ["/login", "/auth/", "/api/sync/tick", "/privacy"];
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : `${p}/`));

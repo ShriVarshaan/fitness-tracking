@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, real, smallint, text } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, real, smallint, text, timestamp } from "drizzle-orm/pg-core";
 import { createdAt, ownerPolicy, updatedAt, userId } from "./_shared";
 
 export const profile = pgTable(
@@ -15,6 +15,9 @@ export const profile = pgTable(
     units: text("units", { enum: ["metric", "imperial"] }).notNull().default("metric"),
     sleepNeedMin: integer("sleep_need_min").notNull().default(480),
     aiEnabled: boolean("ai_enabled").notNull().default(false),
+    /** Explicit consent to processing health data, against a privacy-notice version. */
+    privacyAcceptedAt: timestamp("privacy_accepted_at", { withTimezone: true }),
+    privacyVersion: text("privacy_version"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

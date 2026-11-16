@@ -6,6 +6,7 @@ const LINKS = [
   { href: "/activities", label: "Activities" },
   { href: "/settings/garmin", label: "Garmin" },
   { href: "/settings/security", label: "Security" },
+  { href: "/settings/account", label: "Account" },
 ] as const;
 
 /** Top navigation shared by signed-in pages. `current` marks the active link for screen readers. */

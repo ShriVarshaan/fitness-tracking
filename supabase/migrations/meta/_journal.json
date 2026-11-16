@@ -78,6 +78,13 @@
       "when": 1794855754066,
       "tag": "20261116190234_findings_insights",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794856031220,
+      "tag": "20261116190711_privacy_consent",
+      "breakpoints": true
     }
   ]
 }
