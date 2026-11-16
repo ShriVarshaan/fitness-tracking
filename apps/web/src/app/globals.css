@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+/* Design tokens. Phase 0 placeholder palette; the real design pass comes with the Today page. */
+:root {
+  --background: #f7f7f5;
+  --foreground: #1a1a19;
+  --surface: #ffffff;
+  --border: #dedcd6;
+  --muted: #6b6a66;
+  --accent: #1f6f5c;
+  --accent-fg: #ffffff;
+  --danger: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121211;
+    --foreground: #ecebe8;
+    --surface: #1b1b1a;
+    --border: #34332f;
+    --muted: #a19f99;
+    --accent: #4fb89c;
+    --accent-fg: #0d1f1a;
+    --danger: #f97066;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

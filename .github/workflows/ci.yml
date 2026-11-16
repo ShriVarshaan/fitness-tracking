@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+          ALLOWED_EMAIL: ci@example.com
+      - name: No server secrets in the client bundle
+        run: |
+          if grep -rlE "SUPABASE_SECRET_KEY|SERVICE_ROLE|CRON_SECRET|DATABASE_URL|GROQ_API_KEY" apps/web/.next/static; then
+            echo "Server-only variable name found in client bundle" >&2
+            exit 1
+          fi
