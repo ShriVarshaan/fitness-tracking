@@ -246,6 +246,15 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/advice:
+    dependencies:
+      '@ft/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ft/metrics':
+        specifier: workspace:*
+        version: link:../metrics
+
   packages/core: {}
 
   packages/db:
