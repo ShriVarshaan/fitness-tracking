@@ -14,8 +14,9 @@ export const profile = pgTable(
     heightCm: real("height_cm"),
     units: text("units", { enum: ["metric", "imperial"] }).notNull().default("metric"),
     sleepNeedMin: integer("sleep_need_min").notNull().default(480),
-    aiEnabled: boolean("ai_enabled").notNull().default(false),
-    /** When the user opted in to AI wording (separate consent; null when off). */
+    /** AI wording is on by default (opt-out); users can turn it off on the Account page. */
+    aiEnabled: boolean("ai_enabled").notNull().default(true),
+    /** When the user last switched AI wording on (null if never changed or off). */
     aiConsentedAt: timestamp("ai_consented_at", { withTimezone: true }),
     /** Explicit consent to processing health data, against a privacy-notice version. */
     privacyAcceptedAt: timestamp("privacy_accepted_at", { withTimezone: true }),

@@ -99,6 +99,13 @@
       "when": 1794858529583,
       "tag": "20261116194849_ai_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794865703028,
+      "tag": "20261116214823_ai_opt_out",
+      "breakpoints": true
     }
   ]
 }

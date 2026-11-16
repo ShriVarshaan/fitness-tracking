@@ -268,7 +268,8 @@ async function maybeReword(
   const generate = groqGenerate();
   if (!generate) return { insight: template, rewordKey: null, fallback: null };
   const prof = await db.query.profile.findFirst({ columns: { aiEnabled: true }, where: eq(profile.userId, userId) });
-  if (!prof?.aiEnabled) return { insight: template, rewordKey: null, fallback: null };
+  // Opt-out: accounts without a profile row get the default (on).
+  if (prof && !prof.aiEnabled) return { insight: template, rewordKey: null, fallback: null };
 
   const key = rewordKey(template);
   const existing = await db.query.insights.findFirst({

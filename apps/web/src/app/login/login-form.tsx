@@ -54,6 +54,12 @@ export function LoginForm() {
             </span>
           </label>
         )}
+        {isSignUp && (
+          <p className="text-xs text-muted">
+            AI wording is on by default: the numbers behind your summaries (no name or email) are sent to Groq to reword
+            them. You can turn it off on the Account page at any time.
+          </p>
+        )}
         <button
           type="submit"
           disabled={pending}

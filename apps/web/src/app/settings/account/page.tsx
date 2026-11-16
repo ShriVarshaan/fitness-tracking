@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
 import { createClient } from "@/lib/supabase/server";
-import { aiAvailable, aiModel } from "@/server/ai";
+import { aiAvailable } from "@/server/ai";
 import { AiWordingForm, DeleteAccountForm, SleepNeedForm } from "./forms";
 
 export const metadata: Metadata = { title: "Account" };
@@ -14,6 +14,8 @@ export default async function AccountPage() {
     supabase.auth.getClaims(),
     supabase.from("profile").select("sleep_need_min, privacy_accepted_at, privacy_version, ai_enabled, ai_consented_at").maybeSingle(),
   ]);
+  // Opt-out: no profile row yet means the default, which is on.
+  const aiOn = profile ? Boolean(profile.ai_enabled) : true;
   const email = typeof auth?.claims.email === "string" ? auth.claims.email : null;
 
   return (
@@ -31,19 +33,20 @@ export default async function AccountPage() {
       </section>
 
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
-        <h2 className="font-medium">AI wording (optional)</h2>
+        <h2 className="font-medium">AI wording</h2>
         <p className="text-sm text-muted">
-          Your morning summary is always worked out by fixed rules from your numbers. If you turn this on, an AI model
-          rewrites the wording only. Its text is checked against your numbers before it&rsquo;s shown, and the standard
-          wording is used if it fails. Health warnings are never sent to the model. It&rsquo;s off by default.
+          Your morning summary is always worked out by fixed rules from your numbers. With this on, an AI model
+          rewrites the wording only, using the numbers behind the summary (no name or email), which are sent to Groq
+          (US). Its text is checked against your numbers before it&rsquo;s shown, and the standard wording is used if it
+          fails. Health warnings are never sent to the model. It&rsquo;s on by default; you can turn it off here at any time.
         </p>
         <p className="text-sm">
-          Currently: <strong className="font-semibold">{profile?.ai_enabled ? "on" : "off"}</strong>
-          {profile?.ai_enabled && profile.ai_consented_at && (
+          Currently: <strong className="font-semibold">{aiOn ? "on" : "off"}</strong>
+          {aiOn && profile?.ai_consented_at && (
             <span className="text-muted"> (since {new Date(profile.ai_consented_at).toLocaleDateString("en-GB")})</span>
           )}
         </p>
-        <AiWordingForm enabled={Boolean(profile?.ai_enabled)} available={aiAvailable()} model={aiModel()} />
+        <AiWordingForm enabled={aiOn} available={aiAvailable()} />
       </section>
 
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">

@@ -36,7 +36,7 @@ export function SleepNeedForm({ current }: { current: number }) {
   );
 }
 
-export function AiWordingForm({ enabled, available, model }: { enabled: boolean; available: boolean; model: string }) {
+export function AiWordingForm({ enabled, available }: { enabled: boolean; available: boolean }) {
   const [state, action, pending] = useActionState(setAiWording, initial);
   if (!available) {
     return <p className="text-sm text-muted">Not available on this server (no AI provider is configured).</p>;
@@ -44,15 +44,6 @@ export function AiWordingForm({ enabled, available, model }: { enabled: boolean;
   return (
     <form action={action} className="space-y-3">
       <input type="hidden" name="enable" value={enabled ? "0" : "1"} />
-      {!enabled && (
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="consent" required className="mt-1 size-4 accent-accent" />
-          <span>
-            I agree to the numbers behind my morning summary (for example HRV, resting heart rate and sleep duration,
-            with no name or email) being sent to Groq, a US company, so its model ({model}) can reword the summary.
-          </span>
-        </label>
-      )}
       <button
         type="submit"
         disabled={pending}

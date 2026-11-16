@@ -37,14 +37,11 @@ export async function saveSleepNeed(_prev: FormState, formData: FormData): Promi
   return { status: "saved", message: "Saved. Estimates have been updated." };
 }
 
-/** Opt in or out of AI wording. Turning it on needs explicit consent (Garmin terms and UK GDPR). */
+/** Turn AI wording on or off (it is on by default). */
 export async function setAiWording(_prev: FormState, formData: FormData): Promise<FormState> {
   const userId = await requireUserId();
   const enable = formData.get("enable") === "1";
   if (enable && !aiAvailable()) return { status: "error", message: "AI wording isn't available on this server." };
-  if (enable && formData.get("consent") !== "on") {
-    return { status: "error", message: "Tick the box to agree before turning this on." };
-  }
 
   const db = getDb();
   const values = { aiEnabled: enable, aiConsentedAt: enable ? new Date() : null };
