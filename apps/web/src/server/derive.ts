@@ -220,7 +220,13 @@ async function maybeReword(
   if (outcome.status === "template" && outcome.reason !== "red_flag" && outcome.reason !== "no_findings") {
     console.warn(`AI wording fell back to template (${outcome.reason}): ${outcome.detail ?? ""}`);
   }
-  return { insight: outcome.insight, rewordKey: key, fallback: outcome.status === "template" ? outcome.reason : null };
+  // A provider error (rate limit, timeout) is temporary: don't record the key, so the next sync retries.
+  const transient = outcome.status === "template" && outcome.reason === "error";
+  return {
+    insight: outcome.insight,
+    rewordKey: transient ? null : key,
+    fallback: outcome.status === "template" ? outcome.reason : null,
+  };
 }
 
 /**

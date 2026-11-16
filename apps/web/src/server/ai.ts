@@ -31,6 +31,8 @@ export function groqGenerate(): Generate | null {
       maxRetries: 0,
       temperature: 0.4,
       abortSignal: AbortSignal.timeout(20_000),
+      // Rewording needs little reasoning; low effort cuts tokens (free tier: 8k tokens/minute).
+      providerOptions: { groq: { reasoningEffort: "low", reasoningFormat: "hidden" } },
     });
     return output;
   };
