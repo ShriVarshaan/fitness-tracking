@@ -3,6 +3,7 @@ import { SignOutButton } from "@/app/sign-out-button";
 
 const LINKS = [
   { href: "/", label: "Today" },
+  { href: "/week", label: "Week" },
   { href: "/activities", label: "Activities" },
   { href: "/settings/garmin", label: "Garmin" },
   { href: "/settings/security", label: "Security" },

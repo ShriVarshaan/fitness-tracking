@@ -21,6 +21,14 @@ export function formatValue(value: number, unit: string): string {
       return value.toFixed(2);
     case "nights":
       return `${value} night${value === 1 ? "" : "s"}`;
+    case "sessions":
+      return `${value} session${value === 1 ? "" : "s"}`;
+    case "steps":
+      return `${Math.round(value).toLocaleString("en-GB")} steps`;
+    case "min":
+      return `${Math.round(value)} min`;
+    case "load":
+      return `${Math.round(value)}`;
     default:
       return `${Math.round(value * 10) / 10}`;
   }

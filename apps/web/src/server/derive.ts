@@ -1,9 +1,20 @@
 import "server-only";
-import { morningInsight, rewordInsight, rewordKey, validateInsight, type Insight } from "@ft/advice";
+import { morningInsight, rewordInsight, rewordKey, validateInsight, weeklyInsight, type Insight } from "@ft/advice";
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import { aiModel, groqGenerate } from "./ai";
-import { ALGO_VERSION, buildRuleContext, deriveAll, evaluateRules, type DeriveInputs, type DerivedRow } from "@ft/metrics";
+import {
+  ALGO_VERSION,
+  buildRuleContext,
+  deriveAll,
+  evaluateRules,
+  weekStart,
+  weekStats,
+  weeklyEvidence,
+  type DeriveInputs,
+  type DerivedRow,
+  type WeeklyInputs,
+} from "@ft/metrics";
 import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 
 const { activities, activityStreams, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
@@ -38,7 +49,8 @@ export async function usersMissingDerived(db: Db): Promise<string[]> {
   const rows = await db.execute<{ user_id: string }>(sql`
     select distinct d.user_id from daily_summaries d
     where not exists (select 1 from derived_daily x where x.user_id = d.user_id)
-       or not exists (select 1 from insights i where i.user_id = d.user_id)
+       or not exists (select 1 from insights i where i.user_id = d.user_id and i.kind = 'morning')
+       or not exists (select 1 from insights i where i.user_id = d.user_id and i.kind = 'weekly')
        or exists (
          select 1 from derived_daily x
          where x.user_id = d.user_id and (x.metric_code, x.algo_version) not in (${current})
@@ -47,7 +59,12 @@ export async function usersMissingDerived(db: Db): Promise<string[]> {
   return rows.map((r) => r.user_id);
 }
 
-type Inputs = DeriveInputs & { spo2Overnight: Array<{ date: string; value: number }> };
+type Inputs = DeriveInputs & {
+  spo2Overnight: Array<{ date: string; value: number }>;
+  /** Extra daily values for the weekly summary. */
+  daily: Array<{ date: string; steps: number | null; moderate: number | null; vigorous: number | null }>;
+  activityDurations: Array<{ date: string; durationS: number | null }>;
+};
 
 async function loadInputs(db: Db, userId: string): Promise<Inputs> {
   const [hrv, days, nights, acts, prof] = await Promise.all([
@@ -57,7 +74,13 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .where(eq(hrvDaily.userId, userId))
       .orderBy(asc(hrvDaily.localDate)),
     db
-      .select({ date: dailySummaries.localDate, value: dailySummaries.restingHr })
+      .select({
+        date: dailySummaries.localDate,
+        value: dailySummaries.restingHr,
+        steps: dailySummaries.steps,
+        moderate: dailySummaries.intensityMinModerate,
+        vigorous: dailySummaries.intensityMinVigorous,
+      })
       .from(dailySummaries)
       .where(eq(dailySummaries.userId, userId))
       .orderBy(asc(dailySummaries.localDate)),
@@ -72,7 +95,13 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .where(eq(sleepSessions.userId, userId))
       .groupBy(sleepSessions.localDate),
     db
-      .select({ date: activities.localDate, zoneSeconds: activities.hrZoneS, id: activities.sourceRecordId, source: activities.source })
+      .select({
+        date: activities.localDate,
+        zoneSeconds: activities.hrZoneS,
+        id: activities.sourceRecordId,
+        source: activities.source,
+        durationS: activities.durationS,
+      })
       .from(activities)
       .where(eq(activities.userId, userId)),
     db.query.profile.findFirst({ columns: { sleepNeedMin: true }, where: eq(profile.userId, userId) }),
@@ -105,7 +134,40 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       return { date: a.date, zoneSeconds: a.zoneSeconds, hrStream: s?.timeS && s.hr ? { timeS: s.timeS, hr: s.hr } : null };
     }),
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
+    daily: days.map((d) => ({ date: d.date, steps: d.steps, moderate: d.moderate, vigorous: d.vigorous })),
+    activityDurations: acts.map((a) => ({ date: a.date, durationS: a.durationS })),
   };
+}
+
+/** Weekly summaries for last complete week and the current week, keyed by the week's Monday. */
+function weeklyInsights(inputs: Inputs, rows: DerivedRow[], latest: string): Insight[] {
+  const wi: WeeklyInputs = {
+    sleepNeedS: inputs.sleepNeedS,
+    sleep: new Map(inputs.sleep.map((p) => [p.date, p.value])),
+    hrv: new Map(inputs.hrv.map((p) => [p.date, p.value])),
+    rhr: new Map(inputs.rhr.map((p) => [p.date, p.value])),
+    steps: new Map(inputs.daily.flatMap((d) => (d.steps == null ? [] : [[d.date, d.steps] as const]))),
+    intensity: new Map(
+      inputs.daily.flatMap((d) =>
+        d.moderate == null && d.vigorous == null ? [] : [[d.date, { moderate: d.moderate ?? 0, vigorous: d.vigorous ?? 0 }] as const],
+      ),
+    ),
+    activities: inputs.activityDurations,
+    load: new Map(rows.filter((r) => r.metricCode === "trimp_daily" && r.value !== null).map((r) => [r.localDate, r.value!])),
+  };
+
+  const thisMonday = weekStart(latest);
+  const weeks = [addDays(thisMonday, -7), thisMonday];
+  return weeks.map((monday) => {
+    const week = weekStats(wi, monday, latest);
+    const prev = weekStats(wi, addDays(monday, -7), latest);
+    const insight = weeklyInsight(monday, weeklyEvidence(week, prev.daysElapsed ? prev : null, inputs.sleepNeedS), {
+      complete: week.daysElapsed === 7,
+      daysElapsed: week.daysElapsed,
+      sleepNights: week.sleepNights,
+    });
+    return insight;
+  });
 }
 
 async function storeDerived(db: Db, userId: string, rows: DerivedRow[]): Promise<void> {
@@ -167,15 +229,20 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
     restingHrToday: has(inputs.rhr),
     baselineReason: hrvToday?.value === null ? String(hrvToday.components.reason ?? "") || null : null,
   });
-  const { insight, rewordKey: key, fallback } = await maybeReword(db, userId, latest, template);
-  const check = validateInsight(insight);
+  await storeInsight(db, userId, template);
+  for (const weekly of weeklyInsights(inputs, rows, latest)) await storeInsight(db, userId, weekly);
+}
 
+/** Optionally reword, validate and upsert one insight (keyed by user, kind and date). */
+async function storeInsight(db: Db, userId: string, template: Insight): Promise<void> {
+  const { insight, rewordKey: key, fallback } = await maybeReword(db, userId, template);
+  const check = validateInsight(insight);
   await db
     .insert(insights)
     .values({
       userId,
-      kind: "morning",
-      forDate: latest,
+      kind: template.kind,
+      forDate: template.forDate,
       body: { ...insight, rewordKey: key, aiFallback: fallback } as unknown as Record<string, unknown>,
       ruleIds: insight.ruleIds,
       model: insight.model,
@@ -195,9 +262,9 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
 async function maybeReword(
   db: Db,
   userId: string,
-  forDate: string,
   template: Insight,
 ): Promise<{ insight: Insight; rewordKey: string | null; fallback: string | null }> {
+  const forDate = template.forDate;
   const generate = groqGenerate();
   if (!generate) return { insight: template, rewordKey: null, fallback: null };
   const prof = await db.query.profile.findFirst({ columns: { aiEnabled: true }, where: eq(profile.userId, userId) });
@@ -206,7 +273,7 @@ async function maybeReword(
   const key = rewordKey(template);
   const existing = await db.query.insights.findFirst({
     columns: { body: true, model: true },
-    where: and(eq(insights.userId, userId), eq(insights.kind, "morning"), eq(insights.forDate, forDate)),
+    where: and(eq(insights.userId, userId), eq(insights.kind, template.kind), eq(insights.forDate, forDate)),
   });
   if (existing && existing.body.rewordKey === key) {
     return {
