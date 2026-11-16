@@ -2,22 +2,46 @@ import "server-only";
 import { morningInsight, validateInsight } from "@ft/advice";
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
-import { buildRuleContext, deriveAll, evaluateRules, type DeriveInputs, type DerivedRow } from "@ft/metrics";
-import { and, asc, eq, gt, gte, lt, or, sql } from "drizzle-orm";
+import { ALGO_VERSION, buildRuleContext, deriveAll, evaluateRules, type DeriveInputs, type DerivedRow } from "@ft/metrics";
+import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 
-const { activities, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
+const { activities, activityStreams, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
 
 const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
 /** Rules are evaluated (and findings kept) for this many recent days. */
 const FINDINGS_DAYS = 30;
 
-/** Users with Garmin data but no derived rows yet (e.g. first sync, or a new metric version rollout). */
+/** Which algorithm produces each stored metric code. */
+const METRIC_ALGO: Record<string, keyof typeof ALGO_VERSION> = {
+  hrv_baseline: "hrv_baseline",
+  rhr_baseline: "rhr_baseline",
+  sleep_debt: "sleep_debt",
+  trimp_daily: "trimp_edwards",
+  ctl: "pmc",
+  atl: "pmc",
+  tsb: "pmc",
+  acwr: "acwr",
+  readiness: "readiness",
+};
+
+/**
+ * Users who need a recompute without new data: no derived rows or insight yet
+ * (first sync), or rows produced by an older algorithm version (a rollout).
+ */
 export async function usersMissingDerived(db: Db): Promise<string[]> {
+  const current = sql.join(
+    Object.entries(METRIC_ALGO).map(([code, algo]) => sql`(${code}, ${ALGO_VERSION[algo]}::smallint)`),
+    sql`, `,
+  );
   const rows = await db.execute<{ user_id: string }>(sql`
     select distinct d.user_id from daily_summaries d
     where not exists (select 1 from derived_daily x where x.user_id = d.user_id)
        or not exists (select 1 from insights i where i.user_id = d.user_id)
+       or exists (
+         select 1 from derived_daily x
+         where x.user_id = d.user_id and (x.metric_code, x.algo_version) not in (${current})
+       )
     limit 5`);
   return rows.map((r) => r.user_id);
 }
@@ -46,9 +70,26 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .from(sleepSessions)
       .where(eq(sleepSessions.userId, userId))
       .groupBy(sleepSessions.localDate),
-    db.select({ date: activities.localDate, zoneSeconds: activities.hrZoneS }).from(activities).where(eq(activities.userId, userId)),
+    db
+      .select({ date: activities.localDate, zoneSeconds: activities.hrZoneS, id: activities.sourceRecordId, source: activities.source })
+      .from(activities)
+      .where(eq(activities.userId, userId)),
     db.query.profile.findFirst({ columns: { sleepNeedMin: true }, where: eq(profile.userId, userId) }),
   ]);
+
+  // Per-second HR and time from decoded activity files (for HR max and stream-based zones).
+  const streamRows = await db
+    .select({ id: activityStreams.sourceRecordId, source: activityStreams.source, stream: activityStreams.stream, values: activityStreams.values })
+    .from(activityStreams)
+    .where(and(eq(activityStreams.userId, userId), inArray(activityStreams.stream, ["hr", "time_s"])));
+  const streams = new Map<string, { timeS?: number[]; hr?: Array<number | null> }>();
+  for (const s of streamRows) {
+    const key = `${s.source}:${s.id}`;
+    const entry = streams.get(key) ?? {};
+    if (s.stream === "hr") entry.hr = s.values as Array<number | null>;
+    else entry.timeS = s.values;
+    streams.set(key, entry);
+  }
 
   const present = <T extends { value: number | null }>(rows: Array<T & { date: string }>) =>
     rows.filter((r): r is T & { date: string; value: number } => typeof r.value === "number").map((r) => ({ date: r.date, value: r.value }));
@@ -58,7 +99,10 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
     rhr: present(days),
     sleep: present(nights),
     spo2Overnight: nights.flatMap((n) => (typeof n.spo2 === "number" ? [{ date: n.date, value: n.spo2 }] : [])),
-    activities: acts,
+    activities: acts.map((a) => {
+      const s = streams.get(`${a.source}:${a.id}`);
+      return { date: a.date, zoneSeconds: a.zoneSeconds, hrStream: s?.timeS && s.hr ? { timeS: s.timeS, hr: s.hr } : null };
+    }),
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
   };
 }

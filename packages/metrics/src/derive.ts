@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { addDays, daysBetween, type LocalDate } from "@ft/core";
 import { hrvBaseline, rhrBaseline } from "./baselines";
 import { ALGO_VERSION, type DatedValue } from "./common";
-import { acwr, edwardsTrimp, pmc } from "./load";
+import { acwr, edwardsTrimp, edwardsZonesFromHr, hrMaxFromActivities, pmc } from "./load";
 import { readiness } from "./readiness";
 import { sleepDebt } from "./sleep";
 
@@ -14,7 +14,12 @@ export interface DeriveInputs {
   /** Total sleep (s) per wake date. */
   sleep: DatedValue[];
   /** One entry per activity: its local date and HR zone seconds (null if none). */
-  activities: Array<{ date: LocalDate; zoneSeconds: number[] | null }>;
+  activities: Array<{
+    date: LocalDate;
+    zoneSeconds: number[] | null;
+    /** Per-second HR from the FIT file, when fetched. */
+    hrStream?: { timeS: number[]; hr: Array<number | null> } | null;
+  }>;
   sleepNeedS: number;
 }
 
@@ -49,8 +54,16 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
   // Daily training load from activities (Edwards TRIMP).
   const dailyLoad = new Map<LocalDate, number>();
   const missingLoad = new Map<LocalDate, number>();
+  // Activities without Garmin zone times fall back to zones computed from their HR stream (v2).
+  const hrMax = hrMaxFromActivities(inputs.activities.flatMap((a) => (a.hrStream ? [a.hrStream.hr] : [])));
+  const fromStream = new Map<LocalDate, number>();
   for (const a of inputs.activities) {
-    const t = edwardsTrimp(a.zoneSeconds);
+    let zones = a.zoneSeconds;
+    if (!zones && a.hrStream && hrMax) {
+      zones = edwardsZonesFromHr(a.hrStream.timeS, a.hrStream.hr, hrMax);
+      if (zones) fromStream.set(a.date, (fromStream.get(a.date) ?? 0) + 1);
+    }
+    const t = edwardsTrimp(zones);
     if (t === null) missingLoad.set(a.date, (missingLoad.get(a.date) ?? 0) + 1);
     else dailyLoad.set(a.date, (dailyLoad.get(a.date) ?? 0) + t);
   }
@@ -121,7 +134,11 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
     );
 
     const day = pmcDays.get(date)!;
-    const loadComponents = { activitiesWithoutHrZones: missingLoad.get(date) ?? 0 };
+    const loadComponents = {
+      activitiesWithoutHrZones: missingLoad.get(date) ?? 0,
+      zonesFromHrStream: fromStream.get(date) ?? 0,
+      ...(fromStream.has(date) && hrMax ? { hrMaxBpm: hrMax } : {}),
+    };
     push(date, "trimp_daily", day.load, loadComponents, 1, "trimp_edwards", [day.load, loadComponents]);
     // The PMC depends on the whole history up to this date; hash today's state.
     const pmcState = [round(day.ctl, 6), round(day.atl, 6)];

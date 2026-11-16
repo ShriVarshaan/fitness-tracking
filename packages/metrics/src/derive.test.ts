@@ -46,6 +46,21 @@ describe("deriveAll", () => {
     expect(pick(rows, "2026-01-02", "trimp_daily")).toMatchObject({ value: 0, components: { activitiesWithoutHrZones: 1 } });
   });
 
+  it("computes zones from the HR stream when Garmin gave none (v2)", () => {
+    const base = inputs(5);
+    const t = Array.from({ length: 601 }, (_, i) => i);
+    // A 10-minute hard session sets HR max (p99 = 200); the strength session sits at 150 = 75% → zone 3.
+    base.activities = [
+      { date: "2026-01-01", zoneSeconds: [0, 0, 0, 600, 0], hrStream: { timeS: t, hr: t.map(() => 200) } },
+      { date: "2026-01-02", zoneSeconds: null, hrStream: { timeS: t, hr: t.map(() => 150) } },
+    ];
+    const rows = deriveAll(base);
+    expect(pick(rows, "2026-01-02", "trimp_daily")).toMatchObject({
+      value: 30, // 10 min × zone 3
+      components: { activitiesWithoutHrZones: 0, zonesFromHrStream: 1, hrMaxBpm: 200 },
+    });
+  });
+
   it("gives a stable inputs hash for identical inputs and a new one when inputs change", () => {
     const a = deriveAll(inputs(20));
     const b = deriveAll(inputs(20));

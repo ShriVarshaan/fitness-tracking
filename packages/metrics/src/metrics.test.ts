@@ -2,7 +2,7 @@ import { addDays } from "@ft/core";
 import { describe, expect, it } from "vitest";
 import { hrvBaseline, rhrBaseline } from "./baselines";
 import { sampleSd, sufficiency, type DatedValue } from "./common";
-import { acwr, edwardsTrimp, pmc } from "./load";
+import { acwr, edwardsTrimp, edwardsZonesFromHr, hrMaxFromActivities, pmc } from "./load";
 import { logistic, readiness } from "./readiness";
 import { sleepDebt } from "./sleep";
 
@@ -123,6 +123,43 @@ describe("edwardsTrimp", () => {
     expect(edwardsTrimp(null)).toBeNull();
     expect(edwardsTrimp([0, 0, 0, 0, 0])).toBeNull();
     expect(edwardsTrimp([600, 600])).toBeNull();
+  });
+});
+
+describe("edwardsZonesFromHr", () => {
+  it("bins samples by % of HR max, each counting until the next sample", () => {
+    // HR max 200: 110 → zone 1 (55%), 130 → zone 2, 150 → zone 3, 170 → zone 4, 190 → zone 5, 90 → below zones
+    const t = [0, 10, 20, 30, 40, 50, 60];
+    const hr = [110, 130, 150, 170, 190, 90, 190];
+    expect(edwardsZonesFromHr(t, hr, 200)).toEqual([10, 10, 10, 10, 10]);
+  });
+
+  it("caps long gaps at 10 s and skips missing readings", () => {
+    expect(edwardsZonesFromHr([0, 60, 61], [150, null, 150], 200)).toEqual([0, 0, 10, 0, 0]);
+  });
+
+  it("gives Edwards TRIMP that matches the zone formula", () => {
+    // 10 minutes in zone 3 at 1 Hz → 10 × 3 = 30
+    const t = Array.from({ length: 601 }, (_, i) => i);
+    const zones = edwardsZonesFromHr(t, t.map(() => 150), 200);
+    expect(edwardsTrimp(zones)).toBeCloseTo(30, 6);
+  });
+
+  it("returns null without HR max or readings", () => {
+    expect(edwardsZonesFromHr([0, 1], [150, 150], 0)).toBeNull();
+    expect(edwardsZonesFromHr([0, 1], [null, null], 200)).toBeNull();
+  });
+});
+
+describe("hrMaxFromActivities", () => {
+  it("takes the highest per-activity 99th percentile, ignoring spikes", () => {
+    const easy = Array.from({ length: 100 }, (_, i) => 120 + (i % 20)); // p99 = 139
+    const hard = [...Array.from({ length: 99 }, (_, i) => 150 + (i % 35)), 240]; // one spike; p99 = 184
+    expect(hrMaxFromActivities([easy, hard])).toBe(184);
+  });
+
+  it("needs at least a minute of data", () => {
+    expect(hrMaxFromActivities([[180, 181]])).toBeNull();
   });
 });
 

@@ -11,6 +11,51 @@ export function edwardsTrimp(zoneSeconds: readonly number[] | null | undefined):
   return zoneSeconds.reduce((sum, s, i) => sum + (Math.max(0, s) / 60) * (i + 1), 0);
 }
 
+/** Edwards' zone bands as fractions of HR max (zone 1 = 50–60% … zone 5 = 90–100%). */
+const EDWARDS_BANDS = [0.5, 0.6, 0.7, 0.8, 0.9] as const;
+/** Longest gap (s) one HR sample is allowed to stand for. */
+const MAX_SAMPLE_S = 10;
+
+/**
+ * Seconds in each Edwards zone from a per-second HR stream. Each sample counts
+ * for the time until the next one (capped at 10 s); below 50% of HR max counts
+ * for nothing. Edwards 1993. Returns null without usable samples.
+ */
+export function edwardsZonesFromHr(timeS: readonly number[], hr: ReadonlyArray<number | null>, hrMax: number): number[] | null {
+  if (!(hrMax > 0) || timeS.length < 2) return null;
+  const zones = [0, 0, 0, 0, 0];
+  let used = 0;
+  for (let i = 0; i < timeS.length - 1; i++) {
+    const h = hr[i];
+    if (h == null || !(h > 0)) continue;
+    const dt = Math.min(MAX_SAMPLE_S, Math.max(0, timeS[i + 1]! - timeS[i]!));
+    const f = h / hrMax;
+    for (let z = 4; z >= 0; z--) {
+      if (f >= EDWARDS_BANDS[z]!) {
+        zones[z]! += dt;
+        used++;
+        break;
+      }
+    }
+  }
+  return used > 0 ? zones : null;
+}
+
+/**
+ * HR max estimate: the highest per-activity 99th-percentile heart rate
+ * (robust to single-sample spikes). docs/PLAN.md §6.
+ */
+export function hrMaxFromActivities(streams: ReadonlyArray<ReadonlyArray<number | null>>): number | null {
+  let best: number | null = null;
+  for (const s of streams) {
+    const v = s.filter((x): x is number => x != null && x > 30 && x < 250).sort((a, b) => a - b);
+    if (v.length < 60) continue; // under a minute of data
+    const p99 = v[Math.ceil(v.length * 0.99) - 1]!;
+    if (best === null || p99 > best) best = p99;
+  }
+  return best;
+}
+
 export interface PmcDay {
   date: LocalDate;
   load: number;

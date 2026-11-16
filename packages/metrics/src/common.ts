@@ -16,7 +16,7 @@ export const ALGO_VERSION = {
   hrv_baseline: 1,
   rhr_baseline: 1,
   sleep_debt: 1,
-  trimp_edwards: 1,
+  trimp_edwards: 2,
   pmc: 1,
   acwr: 1,
   readiness: 1,
