@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ft/core": "workspace:*"
+    "@ft/core": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

@@ -9,8 +9,6 @@ export const DATA_TYPES = {
   daily_summaries: { chunkDays: 28 },
   sleep: { chunkDays: 28 },
   hrv: { chunkDays: 28 },
-  stress: { chunkDays: 28 },
-  body_battery: { chunkDays: 28 },
   vo2max: { chunkDays: 28 },
   weight: { chunkDays: 90 },
   activities: { chunkDays: 30 },
@@ -97,10 +95,6 @@ export async function fetchJob(client: GarminClient, job: Pick<PlannedJob, "data
       return [{ endpoint: "sleep_summaries", payload: await client.sleepSummaries(from, to) }];
     case "hrv":
       return [{ endpoint: "hrv_daily", payload: await client.hrvSummaries(from, to) }];
-    case "stress":
-      return [{ endpoint: "stress_daily", payload: await client.stressDaily(from, to) }];
-    case "body_battery":
-      return [{ endpoint: "body_battery_daily", payload: await client.bodyBatteryDaily(from, to) }];
     case "vo2max":
       return [{ endpoint: "vo2max_daily", payload: await client.vo2maxDaily(from, to) }];
     case "weight":

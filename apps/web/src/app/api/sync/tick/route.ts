@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/server/db";
+import { processPending } from "@/server/process";
 import { runTick } from "@/server/sync";
 
 // Called by Supabase Cron every 5 minutes (supabase/migrations/*_sync_cron.sql).
@@ -19,6 +20,8 @@ export async function POST(request: NextRequest) {
   if (!authorised(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const result = await runTick(getDb(), { budgetMs: 40_000 });
-  return NextResponse.json(result);
+  const db = getDb();
+  const sync = await runTick(db, { budgetMs: 35_000 });
+  const processed = await processPending(db, { budgetMs: 15_000 });
+  return NextResponse.json({ ...sync, ...processed });
 }

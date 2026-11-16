@@ -36,6 +36,34 @@
       "when": 1794852817749,
       "tag": "20261116181337_sync_cron",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794854351697,
+      "tag": "20261116183911_health_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794854352687,
+      "tag": "20261116183912_drop_redundant_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794854542364,
+      "tag": "20261116184222_activities_vo2max",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794854543292,
+      "tag": "20261116184223_retry_quarantined",
+      "breakpoints": true
     }
   ]
 }

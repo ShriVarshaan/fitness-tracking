@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb } from "@/server/db";
 import { requireUserId } from "@/server/session";
+import { processPending } from "@/server/process";
 import { connectGarmin, disconnectGarmin, runTick } from "@/server/sync";
 
 export type KeyFormState = { status: "idle" | "saved" | "error"; message?: string };
@@ -67,7 +68,9 @@ export async function removeGarminKey(): Promise<void> {
 export async function syncNow(): Promise<void> {
   const userId = await requireUserId();
   try {
-    await runTick(getDb(), { userId, budgetMs: 25_000, maxJobs: 20 });
+    const db = getDb();
+    await runTick(db, { userId, budgetMs: 20_000, maxJobs: 20 });
+    await processPending(db, { userId, budgetMs: 10_000 });
   } catch (err) {
     console.error("syncNow failed:", err instanceof Error ? err.message : err);
   }

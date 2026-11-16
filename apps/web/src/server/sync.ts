@@ -4,6 +4,7 @@ import { localDate } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import {
   ALL_DATA_TYPES,
+  DATA_TYPES,
   exchangeKey,
   fetchJob,
   GarminAuthError,
@@ -144,6 +145,12 @@ export async function runTick(db: Db, opts: TickOptions): Promise<TickResult> {
 
     const job = await claimJob(db, opts.userId, [...pausedUsers]);
     if (!job) return result;
+
+    // Data types we no longer fetch (e.g. stress, now read from daily summaries).
+    if (!(job.dataType in DATA_TYPES)) {
+      await db.update(syncJobs).set({ status: "done", lockedAt: null }).where(eq(syncJobs.id, job.id));
+      continue;
+    }
 
     const conn = await db.query.garminConnection.findFirst({ where: eq(garminConnection.userId, job.userId) });
     if (!conn || conn.status !== "active") {

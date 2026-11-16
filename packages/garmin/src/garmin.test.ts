@@ -110,8 +110,8 @@ describe("planBackfill", () => {
 
   it("puts every type's newest chunk first", () => {
     const jobs = planBackfill("2026-11-16", 365);
-    const firstEight = new Set(jobs.slice(0, 8).map((j) => j.dataType));
-    expect(firstEight.size).toBe(8);
+    const firstRound = new Set(jobs.slice(0, 6).map((j) => j.dataType));
+    expect(firstRound.size).toBe(6);
   });
 });
 
