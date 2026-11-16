@@ -25,9 +25,9 @@ export default function PrivacyPage() {
       <Section title="What is stored">
         Your email address and a hashed password (handled by Supabase Auth). If you connect Garmin: your Garmin Personal
         API key (encrypted in Supabase Vault) and the data Garmin returns — daily summaries (steps, heart rate, stress,
-        Body Battery, pulse ox, respiration), sleep, HRV, VO2 max, weight and activities, including each activity's
+        Body Battery, pulse ox, respiration), sleep, HRV, VO2 max, weight and activities, including each activity&rsquo;s
         original file (second-by-second heart rate, pace, power, laps, strength sets and GPS route). Your name and profile
-        picture are not stored, and route points within 200 m of an activity's start and finish are removed before
+        picture are not stored, and route points within 200 m of an activity&rsquo;s start and finish are removed before
         storage. Estimates this app calculates from your data are stored alongside it.
       </Section>
 
