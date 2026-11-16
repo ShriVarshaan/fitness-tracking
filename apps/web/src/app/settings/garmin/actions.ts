@@ -30,7 +30,14 @@ export async function saveGarminKey(_prev: KeyFormState, formData: FormData): Pr
   if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
 
   const expiresOn = addDays(parsed.data.createdOn, Number(parsed.data.lifetimeDays));
-  const result = await connectGarmin(getDb(), userId, parsed.data.apiKey, expiresOn);
+  let result;
+  try {
+    result = await connectGarmin(getDb(), userId, parsed.data.apiKey, expiresOn);
+  } catch (err) {
+    // Log the cause server-side (never the key); show a plain message on the form.
+    console.error("saveGarminKey failed:", err instanceof Error ? err.message : err);
+    return { status: "error", message: "Something went wrong saving your key. Try again shortly." };
+  }
   if (!result.ok) {
     const message = {
       rejected: "Garmin didn't accept that key. Check you copied all of it, and that it hasn't been deleted.",
@@ -47,7 +54,11 @@ export async function saveGarminKey(_prev: KeyFormState, formData: FormData): Pr
 
 export async function removeGarminKey(): Promise<void> {
   const userId = await requireUserId();
-  await disconnectGarmin(getDb(), userId);
+  try {
+    await disconnectGarmin(getDb(), userId);
+  } catch (err) {
+    console.error("removeGarminKey failed:", err instanceof Error ? err.message : err);
+  }
   revalidatePath("/settings/garmin");
   revalidatePath("/");
 }
@@ -55,6 +66,10 @@ export async function removeGarminKey(): Promise<void> {
 /** Run a short sync for this user only, so history appears without waiting for the next tick. */
 export async function syncNow(): Promise<void> {
   const userId = await requireUserId();
-  await runTick(getDb(), { userId, budgetMs: 25_000, maxJobs: 20 });
+  try {
+    await runTick(getDb(), { userId, budgetMs: 25_000, maxJobs: 20 });
+  } catch (err) {
+    console.error("syncNow failed:", err instanceof Error ? err.message : err);
+  }
   revalidatePath("/settings/garmin");
 }
