@@ -1,0 +1,25 @@
+# deps & builds
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.turbo/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# tooling
+.vercel/
+supabase/.temp/
+supabase/.branches/
+playwright-report/
+test-results/
+.claude/settings.local.json
+
+# os
+.DS_Store
+Thumbs.db
