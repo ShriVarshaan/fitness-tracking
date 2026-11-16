@@ -11,7 +11,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { createdAt, ownerPolicy, updatedAt, userId } from "./_shared";
+import { createdAt, ownerReadPolicy, updatedAt, userId } from "./_shared";
 
 /**
  * Connection state only. The API key and access token live in Supabase Vault
@@ -29,11 +29,13 @@ export const garminConnection = pgTable(
     /** Per data type, e.g. { "dailies": "2026-11-16T10:30:00Z" }. */
     lastSyncedAt: jsonb("last_synced_at").$type<Record<string, string>>().notNull().default({}),
     backfillComplete: boolean("backfill_complete").notNull().default(false),
+    /** When incremental jobs were last planned (cron runs more often than we re-plan). */
+    lastPlannedAt: timestamp("last_planned_at", { withTimezone: true }),
     lastError: text("last_error"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  () => [ownerPolicy("garmin_connection")],
+  () => [ownerReadPolicy("garmin_connection")],
 ).enableRLS();
 
 export const syncJobs = pgTable(
@@ -59,7 +61,7 @@ export const syncJobs = pgTable(
     index("sync_jobs_claim_idx").on(t.status, t.runAfter),
     // One job per type and range, so re-planning is idempotent.
     uniqueIndex("sync_jobs_range_uq").on(t.userId, t.dataType, t.rangeFrom, t.rangeTo),
-    ownerPolicy("sync_jobs"),
+    ownerReadPolicy("sync_jobs"),
   ],
 ).enableRLS();
 
@@ -82,6 +84,8 @@ export const rawIngest = pgTable(
   (t) => [
     index("raw_ingest_received_idx").on(t.receivedAt),
     index("raw_ingest_unprocessed_idx").on(t.userId).where(sql`processed_at is null`),
-    ownerPolicy("raw_ingest"),
+    // Skip storing an identical response twice (re-fetched overlap days).
+    index("raw_ingest_dedupe_idx").on(t.userId, t.endpoint, t.sha256),
+    ownerReadPolicy("raw_ingest"),
   ],
 ).enableRLS();

@@ -15,6 +15,27 @@
       "when": 1794850104151,
       "tag": "20261116172824_vault_and_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794852810086,
+      "tag": "20261116181330_sync_tracking",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794852810900,
+      "tag": "20261116181331_sync_read_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794852817749,
+      "tag": "20261116181337_sync_cron",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,18 @@ export const ownerPolicy = (table: string) =>
     withCheck: sql`${authUid} = user_id`,
   });
 
+/**
+ * Owner may read their own rows but not write them: tables that only server code
+ * (sync jobs, raw payloads, connection state) should change.
+ */
+export const ownerReadPolicy = (table: string) =>
+  pgPolicy(`${table}_owner_read`, {
+    as: "permissive",
+    for: "select",
+    to: authenticatedRole,
+    using: sql`${authUid} = user_id`,
+  });
+
 /** Read-only for logged-in users (reference data such as the metric registry). */
 export const authenticatedReadPolicy = (table: string) =>
   pgPolicy(`${table}_authenticated_read`, {

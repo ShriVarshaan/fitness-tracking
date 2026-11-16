@@ -23,8 +23,11 @@ export default async function TodayPage() {
       <section className="rounded-lg border border-border bg-surface p-5">
         <h2 className="font-medium">Garmin isn&rsquo;t connected yet</h2>
         <p className="mt-1 text-sm text-muted">
-          The Garmin API key box arrives in the next build phase. Once your key is saved, your data will appear here.
+          Add your Garmin Personal API key to load your history. Charts and insights arrive in the next build step.
         </p>
+        <Link href="/settings/garmin" className="mt-3 inline-block text-sm font-medium underline">
+          Garmin settings
+        </Link>
       </section>
 
       <footer className="text-xs text-muted">General wellness information, not medical advice.</footer>
