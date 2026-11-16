@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb } from "@/server/db";
 import { recomputeDerived, usersMissingDerived } from "@/server/derive";
-import { processPending } from "@/server/process";
+import { processPending, purgeExpired } from "@/server/process";
 import { runTick } from "@/server/sync";
 
 // Called by Supabase Cron every 5 minutes (supabase/migrations/*_sync_cron.sql).
@@ -28,5 +28,13 @@ export async function POST(request: NextRequest) {
   const toDerive = [...new Set([...processed.touchedUsers, ...(await usersMissingDerived(db))])];
   for (const userId of toDerive.slice(0, 5)) await recomputeDerived(db, userId);
 
-  return NextResponse.json({ ...sync, processed: processed.processed, quarantined: processed.quarantined, derived: toDerive.length });
+  const purged = await purgeExpired(db);
+
+  return NextResponse.json({
+    ...sync,
+    processed: processed.processed,
+    quarantined: processed.quarantined,
+    derived: toDerive.length,
+    purged,
+  });
 }

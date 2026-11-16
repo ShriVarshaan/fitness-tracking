@@ -1,6 +1,6 @@
 # Personal Fitness Tracker — Plan
 
-> Status: Phase 0 in progress. Rewritten 16 Nov 2026 for a £0 build; updated the same day to open sign-ups (each account sees only its own data).
+> Status: Phase 0 done; Phase 1 MVP built and live (see Progress below). Rewritten 16 Nov 2026 for a £0 build with open sign-up.
 > It replaces the earlier family / Garmin Starter / Oracle Cloud plan, which was never committed.
 
 ## Context
@@ -314,6 +314,31 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 - **Phase 3:** chat answers "How did my HRV change in the 2 weeks before my last long run?" with numbers matching SQL.
 
 ---
+
+## Progress (16 Nov 2026)
+
+**Done:**
+- **Phase 0:** monorepo, CI, Supabase (Frankfurt), Vercel (`fra1`), email and password sign-up, optional TOTP, RLS on every table.
+- **Phase 1:**
+  - Garmin key box with Vault storage, plus 5-minute cron sync with backfill and incremental jobs.
+  - Mappers for daily summaries, sleep, HRV, activities and VO2 max, with quarantine for responses that fail validation.
+  - Derived metrics (HRV and resting-HR baselines, sleep debt, Edwards TRIMP, fitness/fatigue/form, ACWR, readiness).
+  - Ten rules, and a template morning insight with validators and an 8-scenario evaluation suite.
+  - Pages: Today, Activities (list and detail), /methods.
+  - Privacy notice, consent at sign-up, data export, account deletion, 30-day raw retention.
+  - Personal API findings recorded in `docs/adr/0001-garmin-personal-api.md`.
+
+**Deviations from this plan:**
+- Garmin daily data lives in dedicated tables (`daily_summaries`, `hrv_daily`, `vo2max_daily`) rather than the generic `observations` table. That table is kept for future intraday or other-source data.
+- Training load uses Edwards zone TRIMP from Garmin's per-activity zone times until FIT streams are decoded.
+- Sleep regularity (SRI) is listed as missing until sleep epochs are fetched.
+
+**Next:**
+- RLS and integration tests against a local Supabase stack.
+- FIT decoding: laps, HR and pace streams, strength sets; Banister TRIMP.
+- Weight mapper, once data exists.
+- Phase 2: optional Groq wording behind the AI switch.
+- Phase 3: dashboard builder.
 
 ## Sources
 

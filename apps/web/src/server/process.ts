@@ -101,6 +101,23 @@ class UnmappedError extends Error {
   }
 }
 
+/** Raw Garmin responses are kept this long (privacy notice and docs/PLAN.md §9). */
+const RAW_RETENTION_DAYS = 30;
+
+/**
+ * Retention: delete raw responses (including quarantined ones) and finished
+ * sync jobs older than 30 days. Canonical rows are unaffected.
+ */
+export async function purgeExpired(db: Db): Promise<{ rawIngest: number; syncJobs: number }> {
+  const raw = await db.execute(
+    sql`delete from raw_ingest where received_at < now() - make_interval(days => ${RAW_RETENTION_DAYS})`,
+  );
+  const jobs = await db.execute(
+    sql`delete from sync_jobs where status in ('done', 'failed') and updated_at < now() - make_interval(days => ${RAW_RETENTION_DAYS})`,
+  );
+  return { rawIngest: raw.count ?? 0, syncJobs: jobs.count ?? 0 };
+}
+
 export interface ProcessResult {
   processed: number;
   quarantined: number;
