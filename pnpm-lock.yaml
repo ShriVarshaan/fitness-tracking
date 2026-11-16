@@ -187,6 +187,9 @@ importers:
       '@ft/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ft/garmin':
+        specifier: workspace:*
+        version: link:../../packages/garmin
       '@supabase/ssr':
         specifier: ^0.12.7
         version: 0.12.7(@supabase/supabase-js@2.119.0)
@@ -251,6 +254,12 @@ importers:
       drizzle-kit:
         specifier: ^0.31.11
         version: 0.31.11
+
+  packages/garmin:
+    dependencies:
+      '@ft/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 
