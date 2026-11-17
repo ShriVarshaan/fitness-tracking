@@ -5,7 +5,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { aiAvailable, aiProviderOptions, chatModel, languageModel } from "@/server/ai";
+import { aiAvailable, aiProviderOptions, chatModels, isTransientProviderError, languageModel, withModelFallback } from "@/server/ai";
 import { finalText, systemPrompt } from "@/server/chat-prompt";
 import { chatTools } from "@/server/chat-tools";
 import { getDb } from "@/server/db";
@@ -68,13 +68,23 @@ export async function POST(request: Request) {
   if (isRedFlagMessage(message)) return save({ answer: SAFETY_REPLY, grounded: null, toolsUsed: [], model: null });
 
   const { data: latest } = await supabase.from("daily_summaries").select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle();
-  const model = chatModel();
+  // Starts on the chat model; moves to the next one if it's busy or out of quota, and stays there.
+  let models = chatModels();
+  let model = models[0]!;
   const tools = chatTools(supabase);
   const messages: ModelMessage[] = [...history.map((h) => ({ role: h.role, content: h.content }) as ModelMessage), { role: "user", content: message }];
 
-  const ask = (msgs: ModelMessage[]) =>
+  const ask = async (msgs: ModelMessage[]) => {
+    const { result, model: used } = await withModelFallback(models, (m) => call(m, msgs), (from, to, err) =>
+      console.warn(`chat: ${from} unavailable (${err instanceof Error ? err.message.slice(0, 120) : "error"}), trying ${to}`),
+    );
+    model = used;
+    models = models.slice(models.indexOf(used));
+    return result;
+  };
+  const call = (m: string, msgs: ModelMessage[]) =>
     generateText({
-      model: languageModel(model),
+      model: languageModel(m),
       system: systemPrompt(new Date().toISOString().slice(0, 10), (latest?.local_date as string | undefined) ?? null),
       messages: msgs,
       tools,
@@ -122,9 +132,9 @@ export async function POST(request: Request) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn("chat failed:", msg.slice(0, 300));
-    const limited = /rate limit|429/i.test(msg);
+    const limited = isTransientProviderError(err);
     return NextResponse.json(
-      { error: limited ? "The free AI quota is busy right now. Try again in a minute." : "Something went wrong answering that. Try again." },
+      { error: limited ? "The AI service is busy or out of free quota right now. Try again in a few minutes." : "Something went wrong answering that. Try again." },
       { status: limited ? 429 : 502 },
     );
   }

@@ -24,6 +24,38 @@ export function chatModel(): string {
   return process.env.GEMINI_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
 }
 
+/** Chat tries its own model, then the wording model (separate free-tier quota, usually less busy). */
+export function chatModels(): string[] {
+  return [...new Set([chatModel(), aiModel()])];
+}
+
+/** The model is busy or the free quota for it ran out: worth trying another model. */
+export function isTransientProviderError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /high demand|overloaded|unavailable|503|429|quota|resource_exhausted|rate limit|try again later/i.test(msg);
+}
+
+/**
+ * Run a model call on each model in turn until one isn't busy or out of
+ * quota. Other errors are thrown straight away. Returns the model that answered.
+ */
+export async function withModelFallback<T>(
+  models: string[],
+  call: (model: string) => Promise<T>,
+  onFallback?: (from: string, to: string, err: unknown) => void,
+): Promise<{ result: T; model: string }> {
+  for (let i = 0; ; i++) {
+    const model = models[i]!;
+    try {
+      return { result: await call(model), model };
+    } catch (err) {
+      const next = models[i + 1];
+      if (!next || !isTransientProviderError(err)) throw err;
+      onFallback?.(model, next, err);
+    }
+  }
+}
+
 /** Rewording and data lookups need little reasoning; low thinking saves tokens and free-tier quota. */
 export const aiProviderOptions = { google: { thinkingConfig: { thinkingLevel: "low" } } satisfies GoogleLanguageModelOptions };
 
