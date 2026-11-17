@@ -65,19 +65,39 @@ export const aiProviderOptions = { google: { thinkingConfig: { thinkingLevel: "l
 
 export const languageModel = (id: string) => google(id);
 
-/** One structured-output call for rewordInsight; no SDK retries (rewordInsight decides). */
-export function createGenerate(model: string): Generate {
-  return async ({ system, prompt }) => {
-    const { output } = await generateText({
-      model: languageModel(model),
-      system,
-      prompt,
-      output: Output.object({ schema: rewordSchema }),
-      maxRetries: 0,
-      temperature: 0.4,
-      abortSignal: AbortSignal.timeout(20_000),
-      providerOptions: aiProviderOptions,
-    });
-    return output;
+/** Insight wording tries its model, then the fallback. */
+export function wordingModels(): string[] {
+  const fallback = process.env.GEMINI_FALLBACK_MODEL?.trim() || FALLBACK_MODEL;
+  return [...new Set([aiModel(), fallback])];
+}
+
+/**
+ * Structured-output calls for rewordInsight, moving to the next model when one
+ * is busy or out of quota. `model()` names the model that gave the last answer,
+ * so each insight records which model worded it. No SDK retries: rewordInsight decides.
+ */
+export function createGenerate(models: string[], onFallback?: (from: string, to: string, err: unknown) => void): { generate: Generate; model: () => string } {
+  let last = models[0]!;
+  const generate: Generate = async ({ system, prompt }) => {
+    const { result, model } = await withModelFallback(
+      models,
+      async (m) => {
+        const { output } = await generateText({
+          model: languageModel(m),
+          system,
+          prompt,
+          output: Output.object({ schema: rewordSchema }),
+          maxRetries: 0,
+          temperature: 0.4,
+          abortSignal: AbortSignal.timeout(20_000),
+          providerOptions: aiProviderOptions,
+        });
+        return output;
+      },
+      onFallback,
+    );
+    last = model;
+    return result;
   };
+  return { generate, model: () => last };
 }

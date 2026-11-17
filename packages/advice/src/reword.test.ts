@@ -2,7 +2,7 @@ import { evaluateRules, type RuleContext } from "@ft/metrics";
 import { addDays } from "@ft/core";
 import { describe, expect, it, vi } from "vitest";
 import { morningInsight } from "./insight";
-import { buildRewordRequest, rewordInsight, rewordKey } from "./reword";
+import { actionsMatch, buildRewordRequest, rewordInsight, rewordKey } from "./reword";
 
 const D = "2026-06-10";
 const NEED = 8 * 3600;
@@ -46,7 +46,35 @@ describe("buildRewordRequest", () => {
   });
 });
 
+describe("actionsMatch", () => {
+  const draft = { actions: [{ text: "a", evidenceIds: ["x", "y"] }] };
+  it("allows rewording with the same or fewer citations", () => {
+    expect(actionsMatch(draft, { actions: [{ text: "b", evidenceIds: ["y", "x"] }] })).toBe(true);
+    expect(actionsMatch(draft, { actions: [{ text: "b", evidenceIds: ["x"] }] })).toBe(true);
+  });
+  it("rejects added, dropped or re-cited actions", () => {
+    expect(actionsMatch(draft, { actions: [] })).toBe(false);
+    expect(actionsMatch(draft, { actions: [{ text: "b", evidenceIds: ["x"] }, { text: "c", evidenceIds: ["y"] }] })).toBe(false);
+    expect(actionsMatch(draft, { actions: [{ text: "b", evidenceIds: ["z"] }] })).toBe(false);
+    expect(actionsMatch({ actions: [] }, { actions: [{ text: "Review your session.", evidenceIds: ["x"] }] })).toBe(false);
+  });
+});
+
 describe("rewordInsight", () => {
+  it("rejects invented actions and falls back to the template", async () => {
+    const extra = { ...good, actions: [...good.actions, { text: "Review your 8h 00m of sleep.", evidenceIds: ["sleep_last_night"] }] };
+    const generate = vi.fn(async () => extra);
+    const out = await rewordInsight(template, generate, "m");
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(out).toMatchObject({ status: "template", reason: "invalid" });
+    expect(out.status === "template" && out.detail).toMatch(/actions changed/);
+  });
+
+  it("records the model that answered when given a function", async () => {
+    const out = await rewordInsight(template, async () => good, () => "gemini-3.1-flash-lite");
+    expect(out.insight.model).toBe("gemini-3.1-flash-lite");
+  });
+
   it("uses valid model output and keeps evidence, confidence and missing data from the template", async () => {
     const out = await rewordInsight(template, async () => good, "openai/gpt-oss-20b");
     expect(out.status).toBe("reworded");

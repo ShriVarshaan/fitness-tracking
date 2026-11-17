@@ -1,6 +1,6 @@
 import "server-only";
 import type { Generate } from "@ft/advice";
-import { aiAvailable, aiModel, createGenerate } from "./ai-config";
+import { aiAvailable, createGenerate, wordingModels } from "./ai-config";
 
 export {
   aiAvailable,
@@ -13,9 +13,12 @@ export {
 } from "./ai-config";
 
 /**
- * The model call used by rewordInsight, or null when AI isn't configured on the
- * server. Short timeout so a slow provider never holds up the sync.
+ * The model calls used by rewordInsight (with fallback), or null when AI isn't
+ * configured on the server. Short timeout so a slow provider never holds up the sync.
  */
-export function aiGenerate(): Generate | null {
-  return aiAvailable() ? createGenerate(aiModel()) : null;
+export function aiGenerate(): { generate: Generate; model: () => string } | null {
+  if (!aiAvailable()) return null;
+  return createGenerate(wordingModels(), (from, to, err) =>
+    console.warn(`AI wording: ${from} unavailable (${err instanceof Error ? err.message.slice(0, 120) : "error"}), trying ${to}`),
+  );
 }

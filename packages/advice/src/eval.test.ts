@@ -53,6 +53,32 @@ describe("validators", () => {
     expect(safetyViolations("Consider an easier day.")).toEqual([]);
   });
 
+  it("catches telling someone they have a condition", () => {
+    for (const s of [
+      "You have an infection.",
+      "You may have a cold.",
+      "You might have sleep apnoea.",
+      "You probably have overtraining syndrome.",
+      "You've got the flu.",
+      "It looks like you have COVID.",
+      "You could have an irregular heartbeat.",
+    ]) {
+      expect(safetyViolations(s), s).not.toEqual([]);
+    }
+  });
+
+  it("allows ordinary 'you have' sentences", () => {
+    for (const s of [
+      "Over the last 7 nights you have slept 6h 00m less than you need.",
+      "You have accumulated 6h 00m less sleep than you need.",
+      "You have a training load of 140 this week.",
+      "You have trained 2 times this week.",
+      "You might have pushed hard today, so take tomorrow easier.",
+    ]) {
+      expect(safetyViolations(s), s).toEqual([]);
+    }
+  });
+
   it("rejects an action with no evidence", () => {
     const bad = { ...insight, actions: [{ text: "Do something", evidenceIds: [] }] };
     expect(validateInsight(bad).uncited).toEqual(["Do something"]);

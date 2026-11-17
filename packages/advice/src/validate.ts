@@ -25,9 +25,14 @@ export function uncitedActions(insight: Pick<Insight, "actions" | "evidence">): 
   return insight.actions.filter((a) => a.evidenceIds.length === 0 || a.evidenceIds.some((id) => !ids.has(id))).map((a) => a.text);
 }
 
+/** Words that turn "you have …" into a diagnosis. */
+const CONDITION = String.raw`(?:infect\w*|ill|illness|bug|virus|viral|cold|flu|covid|disease|condition|disorder|syndrome|deficien\w*|arrhythmia|a-?fib|atrial fibrillation|irregular heart\w*|heart problem|apno?ea|anaemi\w*|anemi\w*|fever|injur\w*|diabet\w*|hypertension|asthma|depress\w*|anxiety)`;
+
 /** Phrases advice must never contain (diagnosis, dosing, extreme diets). */
 const BLOCKED = [
-  /\byou (?:have|may have|might have|probably have)\b/i,
+  // "you have / may have / might have / 've got", then a condition within two words.
+  // Plain "you have slept…" or "you have a training load of…" is fine.
+  new RegExp(String.raw`\byou(?:'ve| have| may have| might have| could have| probably have| likely have)(?: got)?\s+(?:\S+\s+){0,2}?${CONDITION}\b`, "i"),
   /\bdiagnos/i,
   /\b\d+\s?(?:mg|mcg|µg|iu)\b/i,
   /\b(?:dose|dosage|prescri)/i,

@@ -3,7 +3,7 @@ import { morningInsight, postWorkoutInsight, rewordInsight, rewordKey, validateI
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import { sportName } from "@/lib/activity";
-import { aiGenerate, aiModel } from "./ai";
+import { aiGenerate } from "./ai";
 import {
   ALGO_VERSION,
   activityTrimp,
@@ -312,8 +312,8 @@ async function maybeReword(
   template: Insight,
 ): Promise<{ insight: Insight; rewordKey: string | null; fallback: string | null }> {
   const forDate = template.forDate;
-  const generate = aiGenerate();
-  if (!generate) return { insight: template, rewordKey: null, fallback: null };
+  const ai = aiGenerate();
+  if (!ai) return { insight: template, rewordKey: null, fallback: null };
   const prof = await db.query.profile.findFirst({ columns: { aiEnabled: true }, where: eq(profile.userId, userId) });
   // Opt-out: accounts without a profile row get the default (on).
   if (prof && !prof.aiEnabled) return { insight: template, rewordKey: null, fallback: null };
@@ -331,7 +331,7 @@ async function maybeReword(
     };
   }
 
-  const outcome = await rewordInsight(template, generate, aiModel());
+  const outcome = await rewordInsight(template, ai.generate, ai.model);
   if (outcome.status === "template" && outcome.reason !== "red_flag" && outcome.reason !== "no_findings") {
     console.warn(`AI wording fell back to template (${outcome.reason}): ${outcome.detail ?? ""}`);
   }

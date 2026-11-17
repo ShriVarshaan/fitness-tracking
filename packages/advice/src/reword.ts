@@ -39,7 +39,8 @@ const system = (kind: Insight["kind"]) => [
   "Rules you must follow:",
   "- Use only the facts and numbers in the evidence list. Write every number exactly as it appears there. Do not add, round, convert or estimate any other number.",
   "- Keep every point from the draft; do not add new advice, causes, diagnoses, medicines, supplements or diets.",
-  "- Each action must list the ids of the evidence it relies on.",
+  "- Keep the headline's meaning, including words like big, easy, raised or below its usual range; you may only rephrase it.",
+  "- Return exactly as many actions as the draft, in the same order: each one rewords the matching draft action and keeps its evidence ids unchanged. If the draft has no actions, return an empty list. Never add an action of your own.",
   "- Plain British English, second person, no exclamation marks, no markdown. Keep one paragraph per draft paragraph (at most 8).",
   "- This is general wellness information, not medical advice.",
 ].join("\n");
@@ -70,6 +71,21 @@ export type RewordOutcome =
   | { status: "reworded"; insight: Insight; attempts: number }
   | { status: "template"; insight: Insight; reason: "red_flag" | "no_findings" | "invalid" | "error"; attempts: number; detail?: string };
 
+/**
+ * The model may only reword actions: same count and order, and each action
+ * cites only evidence its matching draft action cites (dropping one is fine,
+ * adding one is not).
+ */
+export function actionsMatch(template: Pick<Insight, "actions">, out: Pick<Reworded, "actions">): boolean {
+  return (
+    out.actions.length === template.actions.length &&
+    out.actions.every((a, i) => {
+      const allowed = new Set(template.actions[i]!.evidenceIds);
+      return a.evidenceIds.length > 0 && a.evidenceIds.every((id) => allowed.has(id));
+    })
+  );
+}
+
 function merge(template: Insight, out: Reworded, model: string): Insight {
   return { ...template, headline: out.headline, body: out.body, actions: out.actions, model: model as Insight["model"] };
 }
@@ -89,7 +105,8 @@ function describe(v: ValidationResult): string {
  * Ask the model to reword the template insight. Retries once on invalid output,
  * then falls back to the template. Never throws.
  */
-export async function rewordInsight(template: Insight, generate: Generate, model: string): Promise<RewordOutcome> {
+export async function rewordInsight(template: Insight, generate: Generate, model: string | (() => string)): Promise<RewordOutcome> {
+  const modelName = () => (typeof model === "string" ? model : model());
   if (template.redFlags.length > 0) return { status: "template", insight: template, reason: "red_flag", attempts: 0 };
   if (template.evidence.length === 0) return { status: "template", insight: template, reason: "no_findings", attempts: 0 };
 
@@ -113,7 +130,11 @@ export async function rewordInsight(template: Insight, generate: Generate, model
       detail = "output did not match the schema";
       continue;
     }
-    const candidate = merge(template, parsed.data, model);
+    if (!actionsMatch(template, parsed.data)) {
+      detail = `actions changed (draft had ${template.actions.length}, model returned ${parsed.data.actions.length} or different evidence)`;
+      continue;
+    }
+    const candidate = merge(template, parsed.data, modelName());
     const check = validateInsight(candidate);
     if (check.ok) return { status: "reworded", insight: candidate, attempts: attempt };
     detail = describe(check);

@@ -48,6 +48,7 @@ import {
   createGenerate,
   languageModel,
   withModelFallback,
+  wordingModels,
 } from "@/server/ai-config";
 import { finalText, systemPrompt } from "@/server/chat-prompt";
 
@@ -76,15 +77,20 @@ const report = {
   cases: [] as unknown[],
 };
 
-/** The app's real generate function, paced and counted. */
-function countedGenerate(): Generate {
-  const real = createGenerate(aiModel());
-  return (req) =>
+/** The app's real generate function (with its model fallback), paced and counted. */
+function countedGenerate(): { generate: Generate; model: () => string } {
+  const real = createGenerate(wordingModels(), (from, to, err) => {
+    // The failed attempt was a request too.
+    report.requests++;
+    const row = (report.cases as Array<Record<string, unknown>>).at(-1)!;
+    row.fallbacks = [...((row.fallbacks as string[]) ?? []), `${from} → ${to}: ${err instanceof Error ? err.message.slice(0, 100) : "error"}`];
+  });
+  const generate: Generate = (req) =>
     paced(async () => {
       report.requests++;
       const started = Date.now();
       try {
-        return await real(req);
+        return await real.generate(req);
       } catch (err) {
         if (err instanceof Error && QUOTA.test(err.message))
           report.quotaErrors++;
@@ -94,6 +100,7 @@ function countedGenerate(): Generate {
           Date.now() - started;
       }
     });
+  return { generate, model: real.model };
 }
 
 const ev = (
@@ -218,17 +225,15 @@ live(`Gemini wording (${aiModel()})`, () => {
       };
       report.cases.push(row);
 
-      const outcome = await rewordInsight(
-        template,
-        countedGenerate(),
-        aiModel(),
-      );
+      const gen = countedGenerate();
+      const outcome = await rewordInsight(template, gen.generate, gen.model);
       const calls = report.requests - before;
       Object.assign(row, {
         status: outcome.status,
         reason: outcome.status === "template" ? outcome.reason : null,
         detail: outcome.status === "template" ? (outcome.detail ?? null) : null,
         calls,
+        answeredBy: outcome.insight.model,
         reply: {
           headline: outcome.insight.headline,
           body: outcome.insight.body,
