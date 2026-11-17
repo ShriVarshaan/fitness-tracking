@@ -17,6 +17,7 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "sync:secrets": "node --experimental-strip-types scripts/set-sync-secrets.ts",
     "test:rls": "vitest run --config vitest.rls.config.ts",
+    "test:live": "vitest run --config vitest.live.config.ts",
     "db:local:reset": "supabase db reset --local"
   },
   "devDependencies": {
