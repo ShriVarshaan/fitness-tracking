@@ -1,4 +1,3 @@
-import { groq } from "@ai-sdk/groq";
 import { isRedFlagMessage, SAFETY_REPLY, safetyViolations, stripMarkdown, ungroundedChatNumbers } from "@ft/advice";
 import { schema } from "@ft/db";
 import { generateText, isStepCount, type ModelMessage } from "ai";
@@ -6,14 +5,13 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { aiAvailable } from "@/server/ai";
+import { aiAvailable, aiProviderOptions, chatModel, languageModel } from "@/server/ai";
 import { chatTools } from "@/server/chat-tools";
 import { getDb } from "@/server/db";
 
 export const maxDuration = 60;
 
 const MESSAGES_PER_HOUR = 30;
-const DEFAULT_CHAT_MODEL = "openai/gpt-oss-120b";
 
 const body = z.object({
   message: z.string().trim().min(1).max(1000),
@@ -87,13 +85,13 @@ export async function POST(request: Request) {
   if (isRedFlagMessage(message)) return save({ answer: SAFETY_REPLY, grounded: null, toolsUsed: [], model: null });
 
   const { data: latest } = await supabase.from("daily_summaries").select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle();
-  const model = process.env.GROQ_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
+  const model = chatModel();
   const tools = chatTools(supabase);
   const messages: ModelMessage[] = [...history.map((h) => ({ role: h.role, content: h.content }) as ModelMessage), { role: "user", content: message }];
 
   const ask = (msgs: ModelMessage[]) =>
     generateText({
-      model: groq(model),
+      model: languageModel(model),
       system: systemPrompt(new Date().toISOString().slice(0, 10), (latest?.local_date as string | undefined) ?? null),
       messages: msgs,
       tools,
@@ -101,7 +99,7 @@ export async function POST(request: Request) {
       maxRetries: 0,
       temperature: 0.2,
       abortSignal: AbortSignal.timeout(45_000),
-      providerOptions: { groq: { reasoningEffort: "low", reasoningFormat: "hidden" } },
+      providerOptions: aiProviderOptions,
     });
 
   try {

@@ -40,9 +40,11 @@ export default function PrivacyPage() {
       <Section title="Who processes it">
         Supabase (database, login and encryption, hosted in Frankfurt, EU) and Vercel (hosting; your data passes through
         its servers when pages load). Garmin provides your data under its own terms when you add your key. Activity maps load map images from OpenFreeMap, which sees which map area your browser shows but not your data. No analytics
-        or advertising services are used. AI wording is on by default: the numbers behind your daily and weekly summaries (such as HRV, resting
-        heart rate and sleep duration), with no name or email, are sent to Groq (US) to reword the text; health warnings
-        are never sent. You can turn it off on the Account page at any time, which stops this immediately.
+        or advertising services are used. AI is on by default: the numbers behind your summaries (such as HRV, resting
+        heart rate and sleep duration), with no name or email, are sent to Google&rsquo;s Gemini API to reword the text,
+        and if you use chat, your questions and the data looked up to answer them are sent too. Google may process this
+        outside the UK and keeps it for a limited time to detect misuse. Health warnings are never sent. You can turn AI
+        off on the Account page at any time, which stops this immediately.
       </Section>
 
       <Section title="Who can see it">

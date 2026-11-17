@@ -20,7 +20,7 @@ A web app built for me, with **open sign-up** so recruiters and others can creat
 | Data source | **Garmin Personal API**, key pasted into Settings | Pull only. No approval process. Key → 24 h access token, no refresh token. Key lifetime 30 d / 90 d / 180 d / 1 yr, chosen when created; shown only once. |
 | Hosting | **Vercel Hobby** (free, personal non-commercial use) | Next.js deploys from GitHub. Serverless functions only, no long-running worker. Vercel cron is limited to once a day on Hobby, so scheduling moves to Supabase. |
 | Database, secrets, login, scheduling | **Supabase Free**, Frankfurt region (eu-central-1) | Postgres for all data, **Vault** for each user's Garmin key, **Auth** for accounts, **Cron** (pg_cron + pg_net) to trigger syncs. Vercel functions pinned to `fra1` to sit next to the database. |
-| AI advice | **Groq free tier** (optional) → deterministic template fallback | No paid fallback. The app is fully useful with AI switched off. |
+| AI advice | **Google Gemini free tier** (optional; ADR 0002) → deterministic template fallback | No paid fallback. The app is fully useful with AI switched off. |
 | Approximations | Build home-made scores, **clearly labelled** | Every estimate shows "Estimate · our formula", its formula and a confidence level. Nothing is presented as a Garmin metric. |
 
 **Out of scope for now:** Apple Health, Google Health API, Garmin Starter (webhooks, pushing workouts and courses to the watch), native iOS app. The data model keeps a `source` column so another source can be added later.
@@ -42,7 +42,7 @@ A web app built for me, with **open sign-up** so recruiters and others can creat
 2. Maximum range per call per type, and how far back history goes.
 3. Rate limits.
 4. Whether FIT files are returned and which fields are stripped (Garmin strips some undocumented fields such as VO2 max and recovery time from FIT files given to third parties).
-5. Terms that apply to a personal key: attribution, storing data, sending data to an AI provider (Groq).
+5. Terms that apply to a personal key: attribution, storing data, sending data to an AI provider (now Google Gemini).
 
 **Fallback:** if the Personal API lacks something important (for example full history or FIT files), add an importer for the Garmin account data export ("Export Your Data" zip with `DI_CONNECT/…` FIT files and wellness JSON).
 
@@ -65,7 +65,7 @@ A web app built for me, with **open sign-up** so recruiters and others can creat
                ▼                                 ▼
 ┌─────── Supabase Free · Frankfurt ──────┐   Garmin Personal API
 │  Postgres: health data, sync_jobs      │
-│  Vault: Garmin API key, access token,  │   Groq (optional, AI text)
+│  Vault: Garmin API key, access token,  │   Gemini (optional, AI text)
 │         CRON_SECRET                    │
 │  Auth: email + password, open sign-up, │
 │        optional TOTP MFA               │
@@ -93,7 +93,7 @@ A web app built for me, with **open sign-up** so recruiters and others can creat
 | Charts | **Apache ECharts** (`echarts-for-react`) | Handles dense series; dual axes, zoom, calendar heatmaps. |
 | Maps | **MapLibre GL JS** + OpenFreeMap tiles (+ free DEM tiles for 3D) | Open source, no paid key. |
 | UI | Tailwind CSS + shadcn/ui; PWA so it installs on the iPhone home screen | Fast to build. |
-| LLM | **Vercel AI SDK** with the Groq provider | Tool calling and Zod structured output; easy to swap providers. |
+| LLM | **Vercel AI SDK** with the Google provider | Tool calling and Zod structured output; easy to swap providers. |
 | Tests | **Vitest**, **MSW** (mock Garmin), Supabase CLI local stack (Docker) for RLS and SQL tests, **Playwright** for E2E | Real Postgres in tests. |
 
 **Repository layout:**
@@ -215,7 +215,7 @@ DOIs are checked when each formula is implemented.
 
 **Layer 2 — wording:**
 - **Template insights** written directly from findings. They are always available and are the default.
-- **Optional AI wording via Groq** (switch in Settings, on by default; can be switched off). The model receives a compact evidence packet and returns `{headline, body, actions[], evidence_ids[], confidence, missing_data[]}`. Validators run before display: every number must match the packet, every action cites a finding, missing data must be acknowledged, and a safety filter blocks diagnosis, medication or supplement dosing and extreme diets. On failure: retry once, then use the template.
+- **Optional AI wording via Google Gemini** (switch in Settings, on by default; can be switched off). The model receives a compact evidence packet and returns `{headline, body, actions[], evidence_ids[], confidence, missing_data[]}`. Validators run before display: every number must match the packet, every action cites a finding, missing data must be acknowledged, and a safety filter blocks diagnosis, medication or supplement dosing and extreme diets. On failure: retry once, then use the template.
 - Every insight shows "Based on: …" chips, a confidence badge and explicit "Not available: …" lines.
 
 **Insights:** morning (after sleep data arrives, or wake time + 45 min), post-workout, evening, weekly. Delivered in-app, plus Web Push once the PWA is installed.
@@ -249,9 +249,9 @@ DOIs are checked when each formula is implemented.
 - **Secrets:** Garmin key and token in Supabase Vault; service-role key and `CRON_SECRET` only in Vercel server environment variables; nothing secret in the client bundle (checked in CI by scanning the build output).
 - **Database:** RLS enabled on every table; the anon key can't read anything without my session. `raw_ingest` kept 30 days.
 - **Transport:** HTTPS everywhere (Vercel, Supabase, Garmin).
-- **Processors:** Vercel (hosting; health data passes through its functions), Supabase (Frankfurt), Groq (US, only if a user switches AI on; zero data retention on).
+- **Processors:** Vercel (hosting; health data passes through its functions), Supabase (Frankfurt), Google Gemini API (only while a user's AI switch is on; UK/EEA data terms: not used for training, logged briefly for abuse detection).
 - **Data rights for every user:** export everything as a zip of JSON/CSV; delete Garmin data; **delete account** (removes the auth user, which cascades to all their rows and Vault secrets).
-- **UK GDPR:** other people's health data (special category) is stored, so the household exemption no longer applies. Needed: a short **privacy notice** shown at sign-up (what's stored, where, processors, retention, how to delete), explicit consent at sign-up for health-data processing, and a separate opt-in before any data goes to Groq.
+- **UK GDPR:** other people's health data (special category) is stored, so the household exemption no longer applies. Needed: a short **privacy notice** shown at sign-up (what's stored, where, processors, retention, how to delete), explicit consent at sign-up for health-data processing, and a separate switch for AI (on by default, the owner's decision) before data goes to Google Gemini.
 - **Abuse limits:** Supabase Auth rate limits on sign-up/sign-in; per-user caps on stored activity streams so one account can't fill the 500 MB database.
 - **Regulatory:** stay a wellness tool with no diagnostic claims.
 
@@ -276,7 +276,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 |---|---|---|
 | **0 — Foundations** | GitHub repo; Supabase project (Frankfurt); Vercel project linked to the repo (`fra1`); monorepo scaffold, lint, typecheck, Vitest, CI; Drizzle schema + RLS; Supabase Auth (email + password sign-up, optional TOTP); metric registry, units, time helpers; deploy a "hello" page behind login. | 3–5 days |
 | **1 — MVP** | Garmin key box + Vault; token handling; sync tick + Supabase Cron; backfill and incremental sync for dailies, sleep, HRV, stress / Body Battery, user metrics, activities (+ details / FIT if available); canonical tables; derived v1 (TRIMP, CTL/ATL/TSB, HRV and resting-HR baselines, sleep debt, readiness); rules v1 incl. red flags; **template** morning insight; Today, Activities (list, detail, 2D map, charts), basic Trends; Settings (connection, sync status, export, delete). | 2–3 wk |
-| **2 — AI and insights** | Groq wording with validators and the eval suite; post-workout, evening and weekly insights; Web Push. | 1–2 wk |
+| **2 — AI and insights** | Gemini wording with validators and the eval suite; post-workout, evening and weekly insights; Web Push. | 1–2 wk |
 | **3 — More features** | Dashboard builder; chat with tools; RPE capture; training plans (in-app); nutrition; 3D maps; year-end recap. | 4–6 wk |
 | **4 — Later** | Apple Health import; Garmin account export importer; critical speed / power and race predictor refinements; self-hosted map tiles. | Open-ended |
 
@@ -291,13 +291,13 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 | Garmin changes or withdraws the Personal API (the program closed once before) | No new data | Data already synced stays; export importer as fallback. |
 | Supabase Free: 500 MB limit, pausing after inactivity | Full database or paused app | 1 Hz streams, FIT files in Storage, size shown in Settings; regular cron activity; confirm pausing behaviour. |
 | Vercel Hobby function time limit | Long backfill fails | Small jobs, about 40 s per tick, resumable. |
-| Groq free quota or policy changes | No AI wording | Templates are the default; AI is optional. |
+| Gemini free quota or terms (UK requires paid tier; accepted, ADR 0002) | No AI wording | Templates are the default; AI is optional. |
 | AI produces wrong numbers or unsafe advice | Bad advice | Rules first, numeric grounding validator, fixed red-flag wording, eval gate. |
 | Leaked service-role key or `CRON_SECRET` | Data exposure | Server-only env vars, bundle scan in CI, rotate on suspicion. |
 | Garmin objects to a personal-key app used by several people | Key or developer account revoked | Accepted risk; existing data stays; fall back to account-export import. |
 | Open sign-up abused (junk accounts, storage, sync load) | Quota exhaustion | Auth rate limits, per-user storage caps, cron processes a bounded number of jobs per tick across all users. |
 
-**To confirm during implementation** (recorded as ADRs): the five Personal API questions in §1; Vercel Hobby's current function duration limit; whether pg_net-triggered traffic keeps a free Supabase project from pausing; the current Groq free model list and limits; whether Supabase Auth passkeys are available.
+**To confirm during implementation** (recorded as ADRs): the five Personal API questions in §1; Vercel Hobby's current function duration limit; whether pg_net-triggered traffic keeps a free Supabase project from pausing; the current Gemini free model list and limits; whether Supabase Auth passkeys are available.
 
 ---
 
@@ -310,7 +310,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
   3. Record a short walk; within about 30 minutes of the watch syncing, it appears with charts and `derived_daily` updates.
   4. Next morning, the template insight cites the actual sleep, HRV and resting-HR values with confidence.
   5. Calling `/api/sync/tick` without the secret, or querying tables with the anon key, returns nothing.
-- **Phase 2:** with Groq on, insights pass the validators and the eval suite meets the 100% hard-check bar; with Groq off, templates still appear.
+- **Phase 2:** with Gemini on, insights pass the validators and the eval suite meets the 100% hard-check bar; with Gemini off, templates still appear.
 - **Phase 3:** chat answers "How did my HRV change in the 2 weeks before my last long run?" with numbers matching SQL.
 
 ---
@@ -331,7 +331,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
   - RLS tests against a local Supabase stack.
   - Personal API findings recorded in `docs/adr/0001-garmin-personal-api.md`.
 - **Phase 2:**
-  - Optional Groq wording (on by default, can be switched off), retried once and then falling back to the template; reused while the template is unchanged.
+  - Optional AI wording via Google Gemini (ADR 0002; was Groq until 17 Nov), on by default and can be switched off, retried once and then falling back to the template; reused while the template is unchanged.
   - Weekly summaries (last complete week and the week so far).
   - Post-workout summary for the latest session: load against your typical session (median of the previous 28 days), Garmin's training effect, RPE, and a nudge when a hard session falls on a low-recovery day. Shown on Today and the activity page.
 - **Phase 3:** chat with read-only typed tools and the red-flag guard.
@@ -344,7 +344,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 
 **Next:**
 - Phase 2: evening insight; Web Push (PWA install + push subscription).
-- AI provider: decide whether to move from Groq to Google (Gemini); record it as an ADR.
+- Gemini: set `GOOGLE_GENERATIVE_AI_API_KEY` in Vercel, run the eval suite and a few chat questions against the live models.
 - Phase 1 gaps: basic Trends page; sync status, errors, quarantine and database size in Settings; weight mapper once data exists.
 - Phase 3: dashboard builder, RPE capture, training plans, nutrition, 3D maps, year-end recap.
 

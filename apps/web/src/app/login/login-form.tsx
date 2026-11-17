@@ -56,8 +56,8 @@ export function LoginForm() {
         )}
         {isSignUp && (
           <p className="text-xs text-muted">
-            AI wording is on by default: the numbers behind your summaries (no name or email) are sent to Groq to reword
-            them. You can turn it off on the Account page at any time.
+            AI wording is on by default: the numbers behind your summaries (no name or email) are sent to Google&rsquo;s
+            Gemini to reword them. You can turn it off on the Account page at any time.
           </p>
         )}
         <button

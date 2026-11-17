@@ -35,9 +35,9 @@ export default async function AccountPage() {
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
         <h2 className="font-medium">AI wording</h2>
         <p className="text-sm text-muted">
-          Your morning summary is always worked out by fixed rules from your numbers. With this on, an AI model
-          rewrites the wording only, using the numbers behind the summary (no name or email), which are sent to Groq
-          (US). Its text is checked against your numbers before it&rsquo;s shown, and the standard wording is used if it
+          Your summaries are always worked out by fixed rules from your numbers. With this on, an AI model
+          rewrites the wording only, using the numbers behind the summary (no name or email), which are sent to
+          Google&rsquo;s Gemini API. Its text is checked against your numbers before it&rsquo;s shown, and the standard wording is used if it
           fails. Health warnings are never sent to the model. It&rsquo;s on by default; you can turn it off here at any time.
         </p>
         <p className="text-sm">

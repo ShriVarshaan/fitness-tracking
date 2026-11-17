@@ -1,6 +1,6 @@
 ---
 name: grounded-advice
-description: Use when working on the advice engine, template insights, scheduled insights (morning, post-workout, evening, weekly), chat tools, prompts, the optional Groq LLM wording or advice evaluation. Ensures every piece of advice is traceable to numbers, admits missing data and stays non-medical.
+description: Use when working on the advice engine, template insights, scheduled insights (morning, post-workout, evening, weekly), chat tools, prompts, the optional Gemini LLM wording or advice evaluation. Ensures every piece of advice is traceable to numbers, admits missing data and stays non-medical.
 ---
 
 # Grounded advice
@@ -9,11 +9,11 @@ Design: `docs/PLAN.md` §7. Rules decide the facts; templates (or optionally an 
 
 ## Flow
 
-findings (deterministic, `derived-metrics` skill) → **evidence packet** (`packages/advice/packet.ts`, compact JSON incl. a data-availability map) → **template insight** (always) → *optional* Groq wording via the Vercel AI SDK with Zod structured output `{headline, body, actions[], evidence_ids[], confidence, missing_data[]}` → **validators** → store `insights` → deliver (in-app + Web Push).
+findings (deterministic, `derived-metrics` skill) → **evidence packet** (`packages/advice/packet.ts`, compact JSON incl. a data-availability map) → **template insight** (always) → *optional* Gemini wording via the Vercel AI SDK with Zod structured output `{headline, body, actions[], evidence_ids[], confidence, missing_data[]}` → **validators** → store `insights` → deliver (in-app + Web Push).
 
 ## Non-negotiables
 
-1. **AI is opt-in.** No LLM call unless the AI switch in Settings is on and `GROQ_API_KEY` is set. Otherwise the template insight is shown.
+1. **AI is opt-out (on by default, owner's decision).** No LLM call if the user switched AI off in Settings or `GOOGLE_GENERATIVE_AI_API_KEY` isn't set. Otherwise the template insight is shown.
 2. **Template path always works** with no LLM at all — test it.
 3. **Numeric grounding:** every number in LLM text must match a packet value (after rounding/unit formatting). Fail → retry once → template.
 4. Every action cites ≥ 1 evidence id; UI renders "Based on…" chips and a confidence badge.
@@ -29,7 +29,7 @@ findings (deterministic, `derived-metrics` skill) → **evidence packet** (`pack
 
 ## LLM
 
-- Groq free tier, zero data retention on; model IDs from config, not hard-coded. Quota exhausted (429) → template. Record the model used on each insight.
+- Google Gemini free tier (ADR 0002); model IDs from config (`GEMINI_MODEL`, `GEMINI_CHAT_MODEL`), not hard-coded. Quota exhausted (429) → template. Record the model used on each insight.
 
 ## Evaluation
 

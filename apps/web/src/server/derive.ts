@@ -3,7 +3,7 @@ import { morningInsight, postWorkoutInsight, rewordInsight, rewordKey, validateI
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import { sportName } from "@/lib/activity";
-import { aiModel, groqGenerate } from "./ai";
+import { aiGenerate, aiModel } from "./ai";
 import {
   ALGO_VERSION,
   activityTrimp,
@@ -302,7 +302,7 @@ async function storeInsight(db: Db, userId: string, template: Insight): Promise<
 }
 
 /**
- * Optional AI wording for users who opted in, when the server has a Groq key.
+ * Optional AI wording (Gemini) unless the user switched it off, when the server has a key.
  * The same template (same rewordKey) is never sent twice: the stored wording is
  * reused, so frequent syncs don't spend the free quota.
  */
@@ -312,7 +312,7 @@ async function maybeReword(
   template: Insight,
 ): Promise<{ insight: Insight; rewordKey: string | null; fallback: string | null }> {
   const forDate = template.forDate;
-  const generate = groqGenerate();
+  const generate = aiGenerate();
   if (!generate) return { insight: template, rewordKey: null, fallback: null };
   const prof = await db.query.profile.findFirst({ columns: { aiEnabled: true }, where: eq(profile.userId, userId) });
   // Opt-out: accounts without a profile row get the default (on).
