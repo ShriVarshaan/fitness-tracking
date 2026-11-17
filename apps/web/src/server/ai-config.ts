@@ -9,7 +9,10 @@ import { generateText, Output } from "ai";
  * GEMINI_CHAT_MODEL for chat. Decision record: docs/adr/0002-ai-provider-gemini.md.
  */
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-const DEFAULT_CHAT_MODEL = "gemini-3.8-flash";
+// gemini-3.8-flash was tried first, but on the free tier it kept answering "high demand" (17 Nov 2026).
+const DEFAULT_CHAT_MODEL = "gemini-3.5-flash-lite";
+/** Last resort when the main model is busy or out of quota (separate free-tier quota). */
+const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
 /** The provider reads GOOGLE_GENERATIVE_AI_API_KEY itself. */
 export function aiAvailable(): boolean {
@@ -24,9 +27,10 @@ export function chatModel(): string {
   return process.env.GEMINI_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
 }
 
-/** Chat tries its own model, then the wording model (separate free-tier quota, usually less busy). */
+/** Chat tries its own model, then the wording model, then the fallback; duplicates are dropped. */
 export function chatModels(): string[] {
-  return [...new Set([chatModel(), aiModel()])];
+  const fallback = process.env.GEMINI_FALLBACK_MODEL?.trim() || FALLBACK_MODEL;
+  return [...new Set([chatModel(), aiModel(), fallback])];
 }
 
 /** The model is busy or the free quota for it ran out: worth trying another model. */
