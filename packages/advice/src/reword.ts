@@ -28,8 +28,14 @@ export interface RewordRequest {
 /** Calls the model and returns its structured output (already parsed JSON). */
 export type Generate = (req: RewordRequest) => Promise<unknown>;
 
-const SYSTEM = [
-  "You rewrite a short morning wellness summary for one person so it reads naturally and warmly.",
+const WHAT: Record<Insight["kind"], string> = {
+  morning: "a short morning wellness summary",
+  post_workout: "a short summary of a workout someone just did",
+  weekly: "a short weekly wellness summary",
+};
+
+const system = (kind: Insight["kind"]) => [
+  `You rewrite ${WHAT[kind]} for one person so it reads naturally and warmly.`,
   "Rules you must follow:",
   "- Use only the facts and numbers in the evidence list. Write every number exactly as it appears there. Do not add, round, convert or estimate any other number.",
   "- Keep every point from the draft; do not add new advice, causes, diagnoses, medicines, supplements or diets.",
@@ -52,7 +58,7 @@ export function buildRewordRequest(insight: Insight): RewordRequest {
     missingData: insight.missingData,
     confidence: insight.confidence,
   };
-  return { system: SYSTEM, prompt: `Rewrite this summary following the rules.\n\n${JSON.stringify(packet, null, 2)}` };
+  return { system: system(insight.kind), prompt: `Rewrite this summary following the rules.\n\n${JSON.stringify(packet, null, 2)}` };
 }
 
 /** Stable fingerprint of what the model would be asked, to avoid re-asking for the same day. */

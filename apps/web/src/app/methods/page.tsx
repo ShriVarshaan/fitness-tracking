@@ -30,9 +30,15 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
   },
   {
     name: "Training load (TRIMP)",
-    how: "For each activity, minutes in each heart-rate zone multiplied by the zone number (1–5), using the zones set in Garmin. Activities without heart-rate zones add nothing and are counted as missing.",
+    how: "For each activity, minutes in each heart-rate zone multiplied by the zone number (1–5), using the zones set in Garmin. When Garmin gives no zone times, zones are worked out from the activity file's per-second heart rate, as 50–60%, 60–70%, 70–80%, 80–90% and 90–100% of your highest recorded heart rate (99th percentile of any activity). Activities with neither add nothing and are counted as missing.",
     needs: "Activities with heart-rate data.",
     source: "Edwards 1993, The Heart Rate Monitor Book.",
+  },
+  {
+    name: "Typical session (after a workout)",
+    how: "The median training load of your sessions in the 28 days before this one. A session at 1.5 times that or more is called big, and one at 0.6 times or less is called easy. The median is used so one race or one short walk barely moves it.",
+    needs: "3 earlier sessions with heart-rate data in the last 28 days.",
+    source: "Our own heuristic over Edwards TRIMP. The 1.5 and 0.6 cut-offs are not from a study.",
   },
   {
     name: "Fitness, fatigue and form",

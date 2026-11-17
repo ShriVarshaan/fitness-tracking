@@ -1,18 +1,24 @@
 import "server-only";
-import { morningInsight, rewordInsight, rewordKey, validateInsight, weeklyInsight, type Insight } from "@ft/advice";
+import { morningInsight, postWorkoutInsight, rewordInsight, rewordKey, validateInsight, weeklyInsight, type Insight } from "@ft/advice";
 import { addDays, daysBetween } from "@ft/core";
 import { schema, type Db } from "@ft/db";
+import { sportName } from "@/lib/activity";
 import { aiModel, groqGenerate } from "./ai";
 import {
   ALGO_VERSION,
+  activityTrimp,
   buildRuleContext,
   deriveAll,
   evaluateRules,
+  hrMaxFromActivities,
+  latestSession,
+  sessionEvidence,
   weekStart,
   weekStats,
   weeklyEvidence,
   type DeriveInputs,
   type DerivedRow,
+  type SessionInput,
   type WeeklyInputs,
 } from "@ft/metrics";
 import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
@@ -23,6 +29,8 @@ const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
 /** Rules are evaluated (and findings kept) for this many recent days. */
 const FINDINGS_DAYS = 30;
+/** A post-workout summary is written only for a session this many days before the latest data, or fewer. */
+const POST_WORKOUT_MAX_AGE_DAYS = 2;
 
 /** Which algorithm produces each stored metric code. */
 const METRIC_ALGO: Record<string, keyof typeof ALGO_VERSION> = {
@@ -64,6 +72,8 @@ type Inputs = DeriveInputs & {
   /** Extra daily values for the weekly summary. */
   daily: Array<{ date: string; steps: number | null; moderate: number | null; vigorous: number | null }>;
   activityDurations: Array<{ date: string; durationS: number | null }>;
+  /** Per-activity details for the post-workout summary (load filled in later). */
+  sessions: Array<Omit<SessionInput, "load"> & { sport: string; recordId: string | null }>;
 };
 
 async function loadInputs(db: Db, userId: string): Promise<Inputs> {
@@ -101,6 +111,12 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
         id: activities.sourceRecordId,
         source: activities.source,
         durationS: activities.durationS,
+        sport: activities.sport,
+        startTime: activities.startTime,
+        distanceM: activities.distanceM,
+        avgHr: activities.avgHr,
+        aerobicTe: activities.aerobicTe,
+        rpe: activities.rpe,
       })
       .from(activities)
       .where(eq(activities.userId, userId)),
@@ -136,6 +152,19 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
     daily: days.map((d) => ({ date: d.date, steps: d.steps, moderate: d.moderate, vigorous: d.vigorous })),
     activityDurations: acts.map((a) => ({ date: a.date, durationS: a.durationS })),
+    sessions: acts.map((a, i) => ({
+      // Unique even without a source id, so the "typical session" never confuses two sessions.
+      id: a.id ?? `row-${i}`,
+      recordId: a.id,
+      date: a.date,
+      sport: a.sport,
+      startTime: a.startTime.toISOString(),
+      durationS: a.durationS,
+      distanceM: a.distanceM,
+      avgHr: a.avgHr,
+      aerobicTe: a.aerobicTe,
+      rpe: a.rpe,
+    })),
   };
 }
 
@@ -167,6 +196,22 @@ function weeklyInsights(inputs: Inputs, rows: DerivedRow[], latest: string): Ins
       sleepNights: week.sleepNights,
     });
     return insight;
+  });
+}
+
+/** Summary of the most recent session, if it is recent enough to be "post-workout". */
+function postWorkout(inputs: Inputs, latest: string, perDay: Array<{ date: string; found: ReturnType<typeof evaluateRules> }>): Insight | null {
+  // Same load as the daily totals: Garmin zones first, then zones from the HR stream.
+  const hrMax = hrMaxFromActivities(inputs.activities.flatMap((a) => (a.hrStream ? [a.hrStream.hr] : [])));
+  const sessions = inputs.sessions.map((s, i) => ({ ...s, load: activityTrimp(inputs.activities[i]!, hrMax).value }));
+  const session = latestSession(sessions);
+  if (!session) return null;
+  const age = daysBetween(session.date, latest);
+  if (age < 0 || age > POST_WORKOUT_MAX_AGE_DAYS) return null;
+  return postWorkoutInsight(session.date, sessionEvidence(session, sessions), {
+    activityId: session.recordId,
+    sport: sportName(session.sport),
+    dayFindings: perDay.find((d) => d.date === session.date)?.found ?? [],
   });
 }
 
@@ -230,6 +275,8 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
     baselineReason: hrvToday?.value === null ? String(hrvToday.components.reason ?? "") || null : null,
   });
   await storeInsight(db, userId, template);
+  const post = postWorkout(inputs, latest, perDay);
+  if (post) await storeInsight(db, userId, post);
   for (const weekly of weeklyInsights(inputs, rows, latest)) await storeInsight(db, userId, weekly);
 }
 
@@ -318,7 +365,7 @@ async function dropStale(db: Db, userId: string, rows: DerivedRow[]): Promise<vo
   });
 }
 
-/** Recompute derived metrics, findings and the morning insight for one user. */
+/** Recompute derived metrics, findings and insights (morning, post-workout, weekly) for one user. */
 export async function recomputeDerived(db: Db, userId: string): Promise<number> {
   const inputs = await loadInputs(db, userId);
   const rows = deriveAll(inputs);

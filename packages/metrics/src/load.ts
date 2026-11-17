@@ -56,6 +56,22 @@ export function hrMaxFromActivities(streams: ReadonlyArray<ReadonlyArray<number 
   return best;
 }
 
+/**
+ * One activity's Edwards TRIMP: Garmin's zone times when present, otherwise
+ * zones computed from the activity's HR stream against the estimated HR max (v2).
+ */
+export function activityTrimp(
+  a: { zoneSeconds: readonly number[] | null; hrStream?: { timeS: number[]; hr: Array<number | null> } | null },
+  hrMax: number | null,
+): { value: number | null; fromStream: boolean } {
+  if (a.zoneSeconds) return { value: edwardsTrimp(a.zoneSeconds), fromStream: false };
+  if (a.hrStream && hrMax) {
+    const zones = edwardsZonesFromHr(a.hrStream.timeS, a.hrStream.hr, hrMax);
+    if (zones) return { value: edwardsTrimp(zones), fromStream: true };
+  }
+  return { value: null, fromStream: false };
+}
+
 export interface PmcDay {
   date: LocalDate;
   load: number;

@@ -104,6 +104,12 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
   return (
     <div className="space-y-4">
       {data.insight && <InsightCard insight={data.insight} />}
+      {data.postWorkout && (
+        <InsightCard
+          insight={data.postWorkout}
+          link={data.postWorkout.activityId ? { href: `/activities/${data.postWorkout.activityId}`, label: "View the workout" } : undefined}
+        />
+      )}
       <ReadinessCard readiness={est("readiness")} trend={estSeries("readiness")} />
       <SleepCard night={night} />
 

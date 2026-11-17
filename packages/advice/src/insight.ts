@@ -18,7 +18,7 @@ export interface InsightAction {
 }
 
 export interface Insight {
-  kind: "morning" | "weekly";
+  kind: "morning" | "post_workout" | "weekly";
   forDate: string;
   headline: string;
   body: string[];
@@ -31,6 +31,8 @@ export interface Insight {
   redFlags: Array<{ ruleId: string; text: string }>;
   ruleIds: string[];
   model: "template";
+  /** Post-workout insights: the activity they describe. */
+  activityId?: string;
 }
 
 export interface Availability {

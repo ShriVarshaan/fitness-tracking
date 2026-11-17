@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { edwardsTrimp } from "@ft/metrics";
+import type { Insight } from "@ft/advice";
 import { AppNav } from "@/components/app-nav";
+import { InsightCard } from "@/components/insight-card";
 import { RouteMap } from "@/components/route-map";
 import { StreamChart } from "@/components/stream-chart";
 import { exerciseName, formatElapsed, formatPace, toPace, type Series } from "@/lib/streams";
@@ -58,12 +60,21 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
 
   // RLS: only the signed-in user's own activities are visible.
   const supabase = await createClient();
-  const [{ data }, { data: streamRows }, { data: laps }, { data: sets }] = await Promise.all([
+  const [{ data }, { data: streamRows }, { data: laps }, { data: sets }, { data: postRow }] = await Promise.all([
     supabase.from("activities").select("*").eq("source_record_id", id).maybeSingle(),
     supabase.from("activity_streams").select("stream, values").eq("source_record_id", id),
     supabase.from("activity_laps").select("*").eq("source_record_id", id).order("idx"),
     supabase.from("activity_sets").select("*").eq("source_record_id", id).order("idx"),
+    supabase
+      .from("insights")
+      .select("body, validator_ok")
+      .eq("kind", "post_workout")
+      .eq("body->>activityId", id)
+      .order("for_date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+  const postWorkout = postRow?.validator_ok ? (postRow.body as Insight) : null;
   if (!data) notFound();
   const a = data as Activity;
   const streams = new Map((streamRows ?? []).map((s) => [s.stream as string, s.values as Series]));
@@ -103,6 +114,8 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
           </p>
         </div>
       </header>
+
+      {postWorkout && <InsightCard insight={postWorkout} />}
 
       <section className="rounded-lg border border-border bg-surface p-5">
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">

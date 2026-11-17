@@ -1,16 +1,22 @@
+import Link from "next/link";
 import { formatValue, type Insight } from "@ft/advice";
 
 const CONFIDENCE_TEXT = { high: "High confidence", medium: "Medium confidence", low: "Low confidence" } as const;
 
-/** Morning insight: text from rules and templates, with the numbers behind it shown as chips. */
-export function InsightCard({ insight }: { insight: Insight }) {
+const KIND_TEXT: Record<Insight["kind"], string> = { morning: "This morning", post_workout: "After your workout", weekly: "Weekly summary" };
+
+/** An insight: text from rules and templates, with the numbers behind it shown as chips. */
+export function InsightCard({ insight, link }: { insight: Insight; link?: { href: string; label: string } }) {
+  // Unique per card: Today and Week show more than one.
+  const headingId = `insight-${insight.kind}-${insight.forDate}`;
   // De-duplicate evidence shared by several findings (e.g. resting HR today).
   const chips = [...new Map(insight.evidence.map((e) => [e.id, e])).values()];
 
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-surface p-5" aria-labelledby="insight-heading">
+    <section className="space-y-3 rounded-lg border border-border bg-surface p-5" aria-labelledby={headingId}>
+      {insight.kind !== "morning" && <p className="text-xs font-medium uppercase tracking-wide text-muted">{KIND_TEXT[insight.kind]}</p>}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="insight-heading" className="text-lg font-semibold tracking-tight">
+        <h2 id={headingId} className="text-lg font-semibold tracking-tight">
           {insight.headline}
         </h2>
         <span className="text-xs text-muted">{CONFIDENCE_TEXT[insight.confidence]}</span>
@@ -63,6 +69,12 @@ export function InsightCard({ insight }: { insight: Insight }) {
             <li key={m}>Not available: {m}</li>
           ))}
         </ul>
+      )}
+
+      {link && (
+        <Link href={link.href} className="inline-block text-sm font-medium underline">
+          {link.label}
+        </Link>
       )}
     </section>
   );

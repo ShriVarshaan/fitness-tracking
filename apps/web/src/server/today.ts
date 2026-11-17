@@ -4,6 +4,8 @@ import { addDays } from "@ft/core";
 import { createClient } from "@/lib/supabase/server";
 
 const WINDOW_DAYS = 30;
+/** Matches POST_WORKOUT_MAX_AGE_DAYS in derive.ts. */
+const POST_WORKOUT_DAYS = 2;
 
 export interface DaySummary {
   local_date: string;
@@ -59,6 +61,8 @@ export interface TodayData {
   derived: Map<string, Map<string, DerivedValue>>;
   /** Latest morning insight, if it passed validation. */
   insight: Insight | null;
+  /** Summary of the latest workout, if recent and it passed validation. */
+  postWorkout: Insight | null;
   /** True when the data shown is synthetic demo data. */
   isDemo: boolean;
   connection: { status: string; key_expires_on: string | null; backfill_complete: boolean } | null;
@@ -83,13 +87,14 @@ export async function loadToday(): Promise<TodayData> {
       sleep: new Map(),
       derived: new Map(),
       insight: null,
+      postWorkout: null,
       isDemo: false,
       connection: connection ?? null,
     };
   }
 
   const from = addDays(latestDate, -(WINDOW_DAYS - 1));
-  const [{ data: days }, { data: hrv }, { data: sleep }, { data: derived }, { data: insightRow }] = await Promise.all([
+  const [{ data: days }, { data: hrv }, { data: sleep }, { data: derived }, { data: insightRow }, { data: postRow }] = await Promise.all([
     supabase
       .from("daily_summaries")
       .select(
@@ -123,6 +128,15 @@ export async function loadToday(): Promise<TodayData> {
       .order("for_date", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Only a workout from the last couple of days counts as "after your workout".
+    supabase
+      .from("insights")
+      .select("body, validator_ok")
+      .eq("kind", "post_workout")
+      .gte("for_date", addDays(latestDate, -POST_WORKOUT_DAYS))
+      .order("for_date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const derivedByMetric = new Map<string, Map<string, DerivedValue>>();
@@ -142,6 +156,7 @@ export async function loadToday(): Promise<TodayData> {
     derived: derivedByMetric,
     // Only show insights that passed the hard checks.
     insight: insightRow?.validator_ok ? (insightRow.body as Insight) : null,
+    postWorkout: postRow?.validator_ok ? (postRow.body as Insight) : null,
     isDemo: latest?.source === "demo",
     connection: connection ?? null,
   };

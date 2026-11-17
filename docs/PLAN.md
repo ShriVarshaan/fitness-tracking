@@ -1,6 +1,6 @@
 # Personal Fitness Tracker — Plan
 
-> Status: Phase 0 done; Phase 1 MVP built and live (see Progress below). Rewritten 16 Nov 2026 for a £0 build with open sign-up.
+> Status: Phases 0 and 1 done; Phase 2 mostly done; chat from Phase 3 built (see Progress below). Rewritten 16 Nov 2026 for a £0 build with open sign-up.
 > It replaces the earlier family / Garmin Starter / Oracle Cloud plan, which was never committed.
 
 ## Context
@@ -215,7 +215,7 @@ DOIs are checked when each formula is implemented.
 
 **Layer 2 — wording:**
 - **Template insights** written directly from findings. They are always available and are the default.
-- **Optional AI wording via Groq** (switch in Settings, off by default). The model receives a compact evidence packet and returns `{headline, body, actions[], evidence_ids[], confidence, missing_data[]}`. Validators run before display: every number must match the packet, every action cites a finding, missing data must be acknowledged, and a safety filter blocks diagnosis, medication or supplement dosing and extreme diets. On failure: retry once, then use the template.
+- **Optional AI wording via Groq** (switch in Settings, on by default; can be switched off). The model receives a compact evidence packet and returns `{headline, body, actions[], evidence_ids[], confidence, missing_data[]}`. Validators run before display: every number must match the packet, every action cites a finding, missing data must be acknowledged, and a safety filter blocks diagnosis, medication or supplement dosing and extreme diets. On failure: retry once, then use the template.
 - Every insight shows "Based on: …" chips, a confidence badge and explicit "Not available: …" lines.
 
 **Insights:** morning (after sleep data arrives, or wake time + 45 min), post-workout, evening, weekly. Delivered in-app, plus Web Push once the PWA is installed.
@@ -315,30 +315,38 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 
 ---
 
-## Progress (16 Nov 2026)
+## Progress (17 Nov 2026)
 
 **Done:**
 - **Phase 0:** monorepo, CI, Supabase (Frankfurt), Vercel (`fra1`), email and password sign-up, optional TOTP, RLS on every table.
 - **Phase 1:**
   - Garmin key box with Vault storage, plus 5-minute cron sync with backfill and incremental jobs.
   - Mappers for daily summaries, sleep, HRV, activities and VO2 max, with quarantine for responses that fail validation.
-  - Derived metrics (HRV and resting-HR baselines, sleep debt, Edwards TRIMP, fitness/fatigue/form, ACWR, readiness).
+  - Activity files decoded: HR, pace and power streams, laps, strength sets, route maps (MapLibre).
+  - Derived metrics (HRV and resting-HR baselines, sleep debt, Edwards TRIMP, fitness/fatigue/form, ACWR, readiness). Training load v2 computes zones from the HR stream when Garmin gives none.
   - Ten rules, and a template morning insight with validators and an 8-scenario evaluation suite.
-  - Pages: Today, Activities (list and detail), /methods.
+  - Pages: Today, Activities (list and detail), Week, /methods.
   - Privacy notice, consent at sign-up, data export, account deletion, 30-day raw retention.
+  - Demo data for people without a Garmin watch.
+  - RLS tests against a local Supabase stack.
   - Personal API findings recorded in `docs/adr/0001-garmin-personal-api.md`.
+- **Phase 2:**
+  - Optional Groq wording (on by default, can be switched off), retried once and then falling back to the template; reused while the template is unchanged.
+  - Weekly summaries (last complete week and the week so far).
+  - Post-workout summary for the latest session: load against your typical session (median of the previous 28 days), Garmin's training effect, RPE, and a nudge when a hard session falls on a low-recovery day. Shown on Today and the activity page.
+- **Phase 3:** chat with read-only typed tools and the red-flag guard.
 
 **Deviations from this plan:**
 - Garmin daily data lives in dedicated tables (`daily_summaries`, `hrv_daily`, `vo2max_daily`) rather than the generic `observations` table. That table is kept for future intraday or other-source data.
-- Training load uses Edwards zone TRIMP from Garmin's per-activity zone times until FIT streams are decoded.
+- Training load is Edwards zone TRIMP (Garmin zones, else zones from the HR stream), not Banister TRIMP.
 - Sleep regularity (SRI) is listed as missing until sleep epochs are fetched.
+- AI wording is on by default (opt-out), the owner's decision of 16 Nov 2026; sign-up text and the privacy notice say so.
 
 **Next:**
-- RLS and integration tests against a local Supabase stack.
-- FIT decoding: laps, HR and pace streams, strength sets; Banister TRIMP.
-- Weight mapper, once data exists.
-- Phase 2: optional Groq wording behind the AI switch.
-- Phase 3: dashboard builder.
+- Phase 2: evening insight; Web Push (PWA install + push subscription).
+- AI provider: decide whether to move from Groq to Google (Gemini); record it as an ADR.
+- Phase 1 gaps: basic Trends page; sync status, errors, quarantine and database size in Settings; weight mapper once data exists.
+- Phase 3: dashboard builder, RPE capture, training plans, nutrition, 3D maps, year-end recap.
 
 ## Sources
 

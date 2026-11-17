@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { addDays, daysBetween, type LocalDate } from "@ft/core";
 import { hrvBaseline, rhrBaseline } from "./baselines";
 import { ALGO_VERSION, type DatedValue } from "./common";
-import { acwr, edwardsTrimp, edwardsZonesFromHr, hrMaxFromActivities, pmc } from "./load";
+import { activityTrimp, acwr, hrMaxFromActivities, pmc } from "./load";
 import { readiness } from "./readiness";
 import { sleepDebt } from "./sleep";
 
@@ -58,12 +58,8 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
   const hrMax = hrMaxFromActivities(inputs.activities.flatMap((a) => (a.hrStream ? [a.hrStream.hr] : [])));
   const fromStream = new Map<LocalDate, number>();
   for (const a of inputs.activities) {
-    let zones = a.zoneSeconds;
-    if (!zones && a.hrStream && hrMax) {
-      zones = edwardsZonesFromHr(a.hrStream.timeS, a.hrStream.hr, hrMax);
-      if (zones) fromStream.set(a.date, (fromStream.get(a.date) ?? 0) + 1);
-    }
-    const t = edwardsTrimp(zones);
+    const { value: t, fromStream: viaStream } = activityTrimp(a, hrMax);
+    if (viaStream) fromStream.set(a.date, (fromStream.get(a.date) ?? 0) + 1);
     if (t === null) missingLoad.set(a.date, (missingLoad.get(a.date) ?? 0) + 1);
     else dailyLoad.set(a.date, (dailyLoad.get(a.date) ?? 0) + t);
   }

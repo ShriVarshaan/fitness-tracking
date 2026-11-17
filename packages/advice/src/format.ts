@@ -27,6 +27,10 @@ export function formatValue(value: number, unit: string): string {
       return `${Math.round(value).toLocaleString("en-GB")} steps`;
     case "min":
       return `${Math.round(value)} min`;
+    case "km":
+      return `${Math.round(value * 10) / 10} km`;
+    case "/10":
+      return `${Math.round(value)}/10`;
     case "load":
       return `${Math.round(value)}`;
     default:
