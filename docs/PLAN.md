@@ -331,7 +331,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
   - RLS tests against a local Supabase stack.
   - Personal API findings recorded in `docs/adr/0001-garmin-personal-api.md`.
 - **Phase 2:**
-  - Optional AI wording via Google Gemini (ADR 0002; was Groq until 17 Nov), on by default and can be switched off, retried once and then falling back to the template; reused while the template is unchanged.
+  - Optional AI wording via Google Gemini (ADR 0002; was Groq until 17 Nov), on by default and can be switched off, retried once and then falling back to the template; reused while the template is unchanged. Model fallback when busy; checked live with `pnpm test:live` (13/13 on 17 Nov).
   - Weekly summaries (last complete week and the week so far).
   - Post-workout summary for the latest session: load against your typical session (median of the previous 28 days), Garmin's training effect, RPE, and a nudge when a hard session falls on a low-recovery day. Shown on Today and the activity page.
 - **Phase 3:** chat with read-only typed tools and the red-flag guard.
@@ -344,7 +344,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 
 **Next:**
 - Phase 2: evening insight; Web Push (PWA install + push subscription).
-- Gemini: set `GOOGLE_GENERATIVE_AI_API_KEY` in Vercel, run the eval suite and a few chat questions against the live models.
+- Small fixes: activity page shows no training load when it comes only from the HR stream (the post-workout summary does); "typical session" compares across all sports; chat sometimes repeats figures from an earlier question; Today showed 0 sessions with HR zones in 30 days on 17 Nov (check whether that is real).
 - Phase 1 gaps: basic Trends page; sync status, errors, quarantine and database size in Settings; weight mapper once data exists.
 - Phase 3: dashboard builder, RPE capture, training plans, nutrition, 3D maps, year-end recap.
 
