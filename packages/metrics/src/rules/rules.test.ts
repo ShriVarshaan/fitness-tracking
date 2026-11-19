@@ -5,6 +5,7 @@ import { hrvBelowNormal } from "./hrv-below-normal";
 import { evaluateRules } from "./index";
 import { loadSpike } from "./load-spike";
 import { missingOvernight } from "./missing-overnight";
+import { planVsReadiness } from "./plan-vs-readiness";
 import { recoveryNormal } from "./recovery-normal";
 import { rhrElevated } from "./rhr-elevated";
 import { rhrRedFlag } from "./rhr-red-flag";
@@ -132,6 +133,28 @@ describe("SLEEP_DEBT_HIGH", () => {
   });
   it("does not fire without a value", () => {
     expect(sleepDebtHigh.evaluate(ctx({ sleepDebt: new Map() }))).toBeNull();
+  });
+});
+
+describe("PLAN_VS_READINESS", () => {
+  const plan = (intensity: string, durationS: number | null = 3600) => new Map([[D, [{ intensity, durationS }]]]);
+  const ready = (score: number, confidence = 0.9) => new Map([[D, { score, confidence }]]);
+  it("fires when a hard session is planned and readiness is low", () => {
+    const f = planVsReadiness.evaluate(ctx({ planned: plan("hard", 4500), readiness: ready(32.6) }));
+    expect(f?.severity).toBe("caution");
+    expect(f?.evidence.map((e) => [e.id, e.value])).toEqual([
+      ["readiness_today", 33],
+      ["planned_duration", 4500],
+    ]);
+  });
+  it("does not fire for an easy plan or reasonable readiness", () => {
+    expect(planVsReadiness.evaluate(ctx({ planned: plan("easy"), readiness: ready(20) }))).toBeNull();
+    expect(planVsReadiness.evaluate(ctx({ planned: plan("long"), readiness: ready(40) }))).toBeNull();
+  });
+  it("does not fire without a plan or a confident readiness estimate", () => {
+    expect(planVsReadiness.evaluate(ctx({ readiness: ready(10) }))).toBeNull();
+    expect(planVsReadiness.evaluate(ctx({ planned: plan("hard"), readiness: ready(10, 0.4) }))).toBeNull();
+    expect(planVsReadiness.evaluate(ctx({ planned: plan("hard") }))).toBeNull();
   });
 });
 

@@ -65,6 +65,8 @@ export interface TodayData {
   evening: Insight | null;
   /** Summary of the latest workout, if recent and it passed validation. */
   postWorkout: Insight | null;
+  /** Workouts planned for the latest day. */
+  planned: Array<{ id: number; title: string; intensity: string; target_duration_s: number | null }>;
   /** Activities in the 30-day window, and the date of the most recent one ever. */
   activities: { inWindow: number; lastDate: string | null };
   /** True when the data shown is synthetic demo data. */
@@ -93,6 +95,7 @@ export async function loadToday(): Promise<TodayData> {
       insight: null,
       postWorkout: null,
       evening: null,
+      planned: [],
       activities: { inWindow: 0, lastDate: null },
       isDemo: false,
       connection: connection ?? null,
@@ -110,6 +113,7 @@ export async function loadToday(): Promise<TodayData> {
     { count: activitiesInWindow },
     { data: lastActivity },
     { data: eveningRow },
+    { data: planned },
   ] = await Promise.all([
     supabase
       .from("daily_summaries")
@@ -156,6 +160,7 @@ export async function loadToday(): Promise<TodayData> {
     supabase.from("activities").select("*", { count: "exact", head: true }).gte("local_date", from).lte("local_date", latestDate),
     supabase.from("activities").select("local_date").order("start_time", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("insights").select("body, validator_ok").eq("kind", "evening").eq("for_date", latestDate).maybeSingle(),
+    supabase.from("planned_workouts").select("id, title, intensity, target_duration_s").eq("local_date", latestDate).order("id"),
   ]);
 
   const derivedByMetric = new Map<string, Map<string, DerivedValue>>();
@@ -177,6 +182,7 @@ export async function loadToday(): Promise<TodayData> {
     insight: insightRow?.validator_ok ? (insightRow.body as Insight) : null,
     postWorkout: postRow?.validator_ok ? (postRow.body as Insight) : null,
     evening: eveningRow?.validator_ok ? (eveningRow.body as Insight) : null,
+    planned: (planned ?? []) as TodayData["planned"],
     activities: { inWindow: activitiesInWindow ?? 0, lastDate: (lastActivity?.local_date as string | undefined) ?? null },
     isDemo: latest?.source === "demo",
     connection: connection ?? null,

@@ -134,6 +134,13 @@
       "when": 1795127305390,
       "tag": "20261119222825_nutrition",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795127803586,
+      "tag": "20261119223643_training_plans",
+      "breakpoints": true
     }
   ]
 }

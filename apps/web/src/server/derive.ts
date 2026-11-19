@@ -26,7 +26,7 @@ import {
 } from "@ft/metrics";
 import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 
-const { activities, activityFeedback, activityStreams, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
+const { activities, activityFeedback, activityStreams, dailySummaries, plannedWorkouts, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
 
 const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
@@ -83,13 +83,15 @@ type Inputs = DeriveInputs & {
   /** Per-activity details for the post-workout summary (load filled in later). */
   sessions: Array<Omit<SessionInput, "load"> & { sport: string; recordId: string | null }>;
   stepsGoal: Map<string, number>;
+  /** Workouts planned in the app (for PLAN_VS_READINESS). */
+  planned: Array<{ date: string; intensity: string; durationS: number | null }>;
   /** Local wake times (minutes after midnight) of recent nights, newest first. */
   wakes: Array<{ date: string; wakeMin: number }>;
   timezone: string;
 };
 
 async function loadInputs(db: Db, userId: string): Promise<Inputs> {
-  const [hrv, days, nights, acts, prof, wakeRows, feedback] = await Promise.all([
+  const [hrv, days, nights, acts, prof, wakeRows, feedback, planned] = await Promise.all([
     db
       .select({ date: hrvDaily.localDate, value: hrvDaily.lastNightAvgMs })
       .from(hrvDaily)
@@ -144,6 +146,10 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .select({ source: activityFeedback.source, id: activityFeedback.sourceRecordId, rpe: activityFeedback.rpe })
       .from(activityFeedback)
       .where(eq(activityFeedback.userId, userId)),
+    db
+      .select({ date: plannedWorkouts.localDate, intensity: plannedWorkouts.intensity, durationS: plannedWorkouts.targetDurationS })
+      .from(plannedWorkouts)
+      .where(eq(plannedWorkouts.userId, userId)),
   ]);
   // A rating entered in the app takes precedence over one from the watch.
   const appRpe = new Map(feedback.flatMap((f) => (f.rpe == null ? [] : [[`${f.source}:${f.id}`, f.rpe] as const])));
@@ -183,6 +189,7 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       return { date: w.date, wakeMin: ((Math.round(local) % 1440) + 1440) % 1440 };
     }),
     timezone: prof?.timezone ?? "Europe/London",
+    planned,
     sessions: acts.map((a, i) => ({
       // Unique even without a source id, so the "typical session" never confuses two sessions.
       id: a.id ?? `row-${i}`,

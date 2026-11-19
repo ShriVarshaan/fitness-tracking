@@ -4,3 +4,4 @@ export * from "./registry";
 export * from "./health";
 export * from "./derived";
 export * from "./nutrition";
+export * from "./training";

@@ -45,6 +45,10 @@ export interface RuleContext {
   sleepDebt: Map<LocalDate, { debtS: number; confidence: number }>;
   acwr: Map<LocalDate, number>;
   ctl: Map<LocalDate, number>;
+  /** Our readiness estimate (0–100) per day. */
+  readiness?: Map<LocalDate, { score: number; confidence: number }>;
+  /** Workouts planned in the app, per day. */
+  planned?: Map<LocalDate, Array<{ intensity: string; durationS: number | null }>>;
 }
 
 export interface Rule {

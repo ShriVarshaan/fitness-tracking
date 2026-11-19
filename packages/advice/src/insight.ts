@@ -66,6 +66,19 @@ const WORDING: Record<string, Wording> = {
     sentence: `You slept ${fmt(ev("sleep_last_night"))} last night, against a need of ${fmtBaseline(ev("sleep_last_night"))}.`,
     action: { text: "Aim for an earlier bedtime tonight.", evidenceIds: ["sleep_last_night"] },
   }),
+  PLAN_VS_READINESS: (f) => {
+    const byId = new Map(f.evidence.map((e) => [e.id, e]));
+    const ready = byId.get("readiness_today")!;
+    const planned = byId.get("planned_duration");
+    return {
+      headline: "A hard session is planned on a low day",
+      sentence: `Your plan has a hard${planned ? `, ${fmt(planned)}` : ""} session today, but your readiness estimate is low, at ${fmt(ready)}.`,
+      action: {
+        text: "Consider swapping it for an easy session, or moving it to a day you feel fresher.",
+        evidenceIds: ["readiness_today", ...(planned ? ["planned_duration"] : [])],
+      },
+    };
+  },
   LOAD_SPIKE: (_f, ev) => ({
     headline: "Your training load has jumped",
     sentence: `Your recent load is well above your usual level (load spike ratio ${fmt(ev("acwr"))}; 0.8–1.3 is typical).`,

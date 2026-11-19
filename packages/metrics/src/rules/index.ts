@@ -9,6 +9,7 @@ import { loadSpike } from "./load-spike";
 import { detraining } from "./detraining";
 import { missingOvernight } from "./missing-overnight";
 import { recoveryNormal } from "./recovery-normal";
+import { planVsReadiness } from "./plan-vs-readiness";
 
 export * from "./types";
 export * from "./context";
@@ -20,6 +21,7 @@ export const RULES = [
   rhrElevated,
   sleepDebtHigh,
   sleepShort,
+  planVsReadiness,
   loadSpike,
   detraining,
   missingOvernight,

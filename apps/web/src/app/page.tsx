@@ -111,6 +111,23 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
           link={data.postWorkout.activityId ? { href: `/activities/${data.postWorkout.activityId}`, label: "View the workout" } : undefined}
         />
       )}
+      {data.planned.length > 0 && (
+        <Card title="Planned today">
+          <ul className="space-y-1">
+            {data.planned.map((w) => (
+              <li key={w.id} className="flex items-baseline justify-between gap-3 text-sm">
+                <Link href={`/training/workout/${w.id}`} className="font-medium underline-offset-4 hover:underline">
+                  {w.title}
+                </Link>
+                <span className="text-muted">
+                  {w.intensity}
+                  {w.target_duration_s ? ` · ${formatDuration(w.target_duration_s)}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       <ReadinessCard readiness={est("readiness")} trend={estSeries("readiness")} />
       <SleepCard night={night} />
 

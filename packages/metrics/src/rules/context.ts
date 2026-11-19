@@ -7,7 +7,10 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : u
 /** Assemble the rule context for `date` from stored inputs and derived rows. */
 export function buildRuleContext(
   date: LocalDate,
-  inputs: DeriveInputs & { spo2Overnight?: Array<{ date: LocalDate; value: number }> },
+  inputs: DeriveInputs & {
+    spo2Overnight?: Array<{ date: LocalDate; value: number }>;
+    planned?: Array<{ date: LocalDate; intensity: string; durationS: number | null }>;
+  },
   rows: DerivedRow[],
 ): RuleContext {
   const ctx: RuleContext = {
@@ -22,7 +25,14 @@ export function buildRuleContext(
     sleepDebt: new Map(),
     acwr: new Map(),
     ctl: new Map(),
+    readiness: new Map(),
+    planned: new Map(),
   };
+  for (const p of inputs.planned ?? []) {
+    const list = ctx.planned!.get(p.date) ?? [];
+    list.push({ intensity: p.intensity, durationS: p.durationS });
+    ctx.planned!.set(p.date, list);
+  }
 
   for (const r of rows) {
     if (r.value === null) continue;
@@ -53,6 +63,9 @@ export function buildRuleContext(
         break;
       case "ctl":
         ctx.ctl.set(r.localDate, r.value);
+        break;
+      case "readiness":
+        ctx.readiness!.set(r.localDate, { score: r.value, confidence: r.confidence });
         break;
     }
   }

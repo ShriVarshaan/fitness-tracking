@@ -17,6 +17,8 @@ export const EXPORT_TABLES = [
   "findings",
   "insights",
   "chat_messages",
+  "training_plans",
+  "planned_workouts",
   "foods",
   "food_log",
   "body_measurements",

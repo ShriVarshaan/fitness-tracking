@@ -29,7 +29,7 @@ export default function PrivacyPage() {
         original file (second-by-second heart rate, pace, power, laps, strength sets and GPS route). Your name and profile
         picture are not stored, and route points within 200 m of an activity&rsquo;s start and finish are removed before
         storage. Estimates this app calculates from your data are stored alongside it. If you use them: your effort ratings and
-        notes, food diary, saved foods, weight and body fat, and the height, birth year and sex you enter for nutrition targets.
+        notes, food diary, saved foods, weight and body fat, training plans and workouts, and the height, birth year and sex you enter for nutrition targets.
       </Section>
 
       <Section title="Why, and the legal basis">
