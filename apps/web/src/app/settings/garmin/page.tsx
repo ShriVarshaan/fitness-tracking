@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { AppNav } from "@/components/app-nav";
 import { ALL_DATA_TYPES } from "@ft/garmin";
 import { formatDay, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
@@ -80,10 +80,8 @@ export default async function GarminSettingsPage() {
   const newest = lastSynced ? Object.values(lastSynced).sort().at(-1) : undefined;
 
   return (
-    <main className="mx-auto w-full max-w-xl flex-1 space-y-8 px-4 py-10">
-      <Link href="/" className="text-sm text-muted underline">
-        ← Today
-      </Link>
+    <main className="mx-auto w-full max-w-xl flex-1 space-y-8 px-4 py-8 sm:py-10">
+      <AppNav current="/settings/garmin" />
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Garmin</h1>
         <p className="text-sm text-muted">
