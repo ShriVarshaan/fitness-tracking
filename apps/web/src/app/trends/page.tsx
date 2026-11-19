@@ -50,7 +50,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
       .lte("local_date", latestDate)
       .then(({ data }) => (data ?? []) as DerivedRow[]);
 
-  const [ctl, atl, tsb, acwr, hrvBase, rhrBase, { data: days }, { data: hrv }, { data: sleep }, { data: vo2 }, { data: prof }] =
+  const [ctl, atl, tsb, acwr, hrvBase, rhrBase, { data: days }, { data: hrv }, { data: sleep }, { data: vo2 }, { data: prof }, { data: weight }] =
     await Promise.all([
       derived("ctl"),
       derived("atl"),
@@ -72,6 +72,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         .order("end_time", { ascending: true }),
       supabase.from("vo2max_daily").select("local_date, sport, value").gte("local_date", from).lte("local_date", latestDate),
       supabase.from("profile").select("sleep_need_min").maybeSingle(),
+      supabase.from("body_measurements").select("local_date, weight_kg").gte("local_date", from).lte("local_date", latestDate).order("local_date"),
     ]);
 
   const last = <T,>(rows: T[]) => rows.at(-1);
@@ -83,6 +84,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
   const intensity = weeklyIntensity(axis, days ?? []);
   const vo2Rows = (vo2 ?? []) as Array<{ local_date: string; sport: string; value: number }>;
   const vo2Run = align(axis, vo2Rows.filter((r) => r.sport === "running"), (r) => r.value);
+  const weightRows = (weight ?? []) as Array<{ local_date: string; weight_kg: number | null }>;
   const vo2Bike = align(axis, vo2Rows.filter((r) => r.sport === "cycling"), (r) => r.value);
 
   return (
@@ -212,10 +214,27 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
           ]}
           note="Garmin updates VO2 max after runs or rides with heart rate and GPS (or power)."
         />
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Weight</p>
-          <p className="text-sm text-muted">Not available: no weight data from Garmin yet.</p>
-        </div>
+        {weightRows.length ? (
+          <TrendChart
+            title="Weight"
+            badge="You entered"
+            labels={axis}
+            unit="kg"
+            digits={1}
+            series={[{ name: "Weight", slot: 1, kind: weightRows.length > 20 ? "line" : "dots", values: align(axis, weightRows, (r) => r.weight_kg) }]}
+          />
+        ) : (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Weight</p>
+            <p className="text-sm text-muted">
+              Not available: no weight recorded in this period. You can log it on the{" "}
+              <Link href="/nutrition" className="underline">
+                Nutrition
+              </Link>{" "}
+              page.
+            </p>
+          </div>
+        )}
       </Section>
 
       <p className="text-xs text-muted">

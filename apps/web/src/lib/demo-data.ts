@@ -33,6 +33,9 @@ export interface DemoDay {
   intensityMinModerate: number;
   intensityMinVigorous: number;
   intensityMinGoal: number;
+  restingKcal: number;
+  activeKcal: number;
+  totalKcal: number;
 }
 
 export interface DemoSleep {
@@ -193,6 +196,9 @@ export function generateDemoData(today: LocalDate, seed = 42): DemoData {
     }
 
     const steps = round(Math.max(2500, 8500 + noise(2500) + (vigorous + moderate) * 90 - (rough ? 2500 : 0)));
+    // Energy use: resting about 1,700 kcal, plus walking (≈ 0.04 kcal a step) and recorded sessions.
+    const restingKcal = round(1700 + noise(20));
+    const activeKcal = round(steps * 0.04 + out.activities.filter((a) => a.localDate === date).reduce((k, a) => k + a.kcal, 0));
     out.days.push({
       localDate: date,
       steps,
@@ -205,6 +211,9 @@ export function generateDemoData(today: LocalDate, seed = 42): DemoData {
       intensityMinModerate: moderate,
       intensityMinVigorous: vigorous,
       intensityMinGoal: 150,
+      restingKcal,
+      activeKcal,
+      totalKcal: restingKcal + activeKcal,
     });
   }
   return out;

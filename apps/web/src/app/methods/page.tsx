@@ -53,6 +53,12 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
     source: "Session-RPE: Foster et al. 2001, Journal of Strength and Conditioning Research 15:109–115.",
   },
   {
+    name: "Nutrition targets",
+    how: "Energy: Garmin's average daily energy use over the last week (or, without it, resting energy × 1.4), minus 500 kcal a day to lose weight or plus 300 to gain, and never below your resting energy. Resting energy uses the Mifflin-St Jeor equation from weight, height, age and sex (the midpoint of the two equations if sex isn't given). Protein: 1.2 g per kg, 1.6 g with 3 or more sessions a week, plus 0.2 g when losing weight (at most 2.0 g). Carbohydrate: 3, 5 or 6 g per kg for under 30, 30–60 or over 60 minutes of training a day. Fat: the rest of the energy, at least 20% of it.",
+    needs: "A weight from the last 60 days, height and birth year. Higher confidence with Garmin's energy use and your sex.",
+    source: "Mifflin et al. 1990, American Journal of Clinical Nutrition 51:241–247; Thomas, Erdman & Burke 2016, Journal of the Academy of Nutrition and Dietetics 116:501–528 (ranges). The points chosen within those ranges are our own heuristic.",
+  },
+  {
     name: "Fitness, fatigue and form",
     how: "Fitness is an exponentially weighted average of daily load over about 42 days, fatigue over about 7 days. Form is yesterday's fitness minus yesterday's fatigue.",
     needs: "Full confidence after 42 days of history.",

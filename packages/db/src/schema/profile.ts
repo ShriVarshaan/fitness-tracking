@@ -14,6 +14,8 @@ export const profile = pgTable(
     heightCm: real("height_cm"),
     units: text("units", { enum: ["metric", "imperial"] }).notNull().default("metric"),
     sleepNeedMin: integer("sleep_need_min").notNull().default(480),
+    /** Nutrition targets: maintain, or a moderate loss or gain (never an extreme deficit). */
+    nutritionGoal: text("nutrition_goal", { enum: ["lose", "maintain", "gain"] }).notNull().default("maintain"),
     /** AI wording is on by default (opt-out); users can turn it off on the Account page. */
     aiEnabled: boolean("ai_enabled").notNull().default(true),
     /** When the user last switched AI wording on (null if never changed or off). */

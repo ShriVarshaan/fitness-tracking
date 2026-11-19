@@ -35,6 +35,9 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
   activity_laps: (u) =>
     sql`insert into activity_laps (user_id, source_record_id, idx, start_time) values (${u}, 'a1', 0, now())`,
   activity_feedback: (u) => sql`insert into activity_feedback (user_id, source_record_id, rpe) values (${u}, 'a1', 6)`,
+  foods: (u) => sql`insert into foods (user_id, name, kcal_100g, source) values (${u}, 'Oats', 375, 'custom')`,
+  food_log: (u) => sql`insert into food_log (user_id, local_date, meal, name, grams, kcal) values (${u}, '2026-01-01', 'breakfast', 'Oats', 40, 150)`,
+  body_measurements: (u) => sql`insert into body_measurements (user_id, local_date, weight_kg) values (${u}, '2026-01-01', 70.5)`,
   activity_sets: (u) => sql`insert into activity_sets (user_id, source_record_id, idx, reps) values (${u}, 'a1', 0, 8)`,
   derived_daily: (u) =>
     sql`insert into derived_daily (user_id, local_date, metric_code, value, algo_version, inputs_hash) values (${u}, '2026-01-01', 'readiness', 60, 1, 'h')`,
@@ -153,6 +156,25 @@ describe("user-written tables", () => {
       as("authenticated", B, (tx) => tx`insert into activity_feedback (user_id, source_record_id, rpe) values (${A}, 'a2', 5)`),
     ).rejects.toThrow(/row-level security/);
     await expect(as("authenticated", A, (tx) => tx`update activity_feedback set rpe = 11 where user_id = ${A}`)).rejects.toThrow(/check constraint/);
+  });
+});
+
+describe("nutrition tables", () => {
+  for (const table of ["foods", "food_log", "body_measurements"]) {
+    it(`${table}: the owner can change their rows; another user can't change or add them`, async () => {
+      const own = await as("authenticated", A, (tx) => tx.unsafe(`update public.${table} set user_id = user_id returning 1`));
+      expect(own).toHaveLength(1);
+      const foreign = await as("authenticated", B, (tx) => tx.unsafe(`delete from public.${table} returning 1`));
+      expect(foreign).toHaveLength(0);
+    });
+  }
+
+  it("rejects writing a diary entry for someone else and impossible values", async () => {
+    await expect(
+      as("authenticated", B, (tx) => tx`insert into food_log (user_id, local_date, meal, name, grams, kcal) values (${A}, '2026-01-02', 'lunch', 'x', 10, 10)`),
+    ).rejects.toThrow(/row-level security/);
+    await expect(as("authenticated", A, (tx) => tx`update body_measurements set weight_kg = 5 where user_id = ${A}`)).rejects.toThrow(/check constraint/);
+    await expect(as("authenticated", A, (tx) => tx`update foods set kcal_100g = 2000 where user_id = ${A}`)).rejects.toThrow(/check constraint/);
   });
 });
 

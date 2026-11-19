@@ -28,7 +28,8 @@ export default function PrivacyPage() {
         Body Battery, pulse ox, respiration), sleep, HRV, VO2 max, weight and activities, including each activity&rsquo;s
         original file (second-by-second heart rate, pace, power, laps, strength sets and GPS route). Your name and profile
         picture are not stored, and route points within 200 m of an activity&rsquo;s start and finish are removed before
-        storage. Estimates this app calculates from your data are stored alongside it.
+        storage. Estimates this app calculates from your data are stored alongside it. If you use them: your effort ratings and
+        notes, food diary, saved foods, weight and body fat, and the height, birth year and sex you enter for nutrition targets.
       </Section>
 
       <Section title="Why, and the legal basis">
@@ -39,7 +40,9 @@ export default function PrivacyPage() {
 
       <Section title="Who processes it">
         Supabase (database, login and encryption, hosted in Frankfurt, EU) and Vercel (hosting; your data passes through
-        its servers when pages load). Garmin provides your data under its own terms when you add your key. Activity maps load map images from OpenFreeMap, which sees which map area your browser shows but not your data. No analytics
+        its servers when pages load). Garmin provides your data under its own terms when you add your key. Activity maps load map images from OpenFreeMap, which sees which map area your browser shows but not your data.
+        Food searches and barcode lookups are sent from our server to Open Food Facts with only the search words or
+        barcode, never who you are; camera images for scanning stay on your device. No analytics
         or advertising services are used. AI is on by default: the numbers behind your summaries (such as HRV, resting
         heart rate and sleep duration), with no name or email, are sent to Google&rsquo;s Gemini API to reword the text,
         and if you use chat, your questions and the data looked up to answer them are sent too. Google may process this

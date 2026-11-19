@@ -8,3 +8,4 @@ export * from "./rules";
 export * from "./weekly";
 export * from "./session";
 export * from "./evening";
+export * from "./nutrition";
