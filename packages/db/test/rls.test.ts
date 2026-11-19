@@ -41,6 +41,7 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
   training_plans: (u) => sql`insert into training_plans (user_id, name, start_date) values (${u}, 'Plan', '2026-01-01')`,
   planned_workouts: (u) =>
     sql`insert into planned_workouts (user_id, local_date, sport, title, intensity) values (${u}, '2026-01-01', 'running', 'Easy run', 'easy')`,
+  dashboards: (u) => sql`insert into dashboards (user_id, name) values (${u}, 'Mine')`,
   activity_sets: (u) => sql`insert into activity_sets (user_id, source_record_id, idx, reps) values (${u}, 'a1', 0, 8)`,
   derived_daily: (u) =>
     sql`insert into derived_daily (user_id, local_date, metric_code, value, algo_version, inputs_hash) values (${u}, '2026-01-01', 'readiness', 60, 1, 'h')`,
@@ -163,7 +164,7 @@ describe("user-written tables", () => {
 });
 
 describe("nutrition tables", () => {
-  for (const table of ["foods", "food_log", "body_measurements", "training_plans", "planned_workouts"]) {
+  for (const table of ["foods", "food_log", "body_measurements", "training_plans", "planned_workouts", "dashboards"]) {
     it(`${table}: the owner can change their rows; another user can't change or add them`, async () => {
       const own = await as("authenticated", A, (tx) => tx.unsafe(`update public.${table} set user_id = user_id returning 1`));
       expect(own).toHaveLength(1);

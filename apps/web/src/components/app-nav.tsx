@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/activities", label: "Activities" },
   { href: "/training", label: "Training" },
   { href: "/nutrition", label: "Nutrition" },
+  { href: "/dashboards", label: "Dashboards" },
   { href: "/chat", label: "Chat" },
   { href: "/settings/garmin", label: "Garmin" },
   { href: "/settings/security", label: "Security" },

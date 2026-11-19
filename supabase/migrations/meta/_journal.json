@@ -141,6 +141,13 @@
       "when": 1795127803586,
       "tag": "20261119223643_training_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795128235466,
+      "tag": "20261119224355_dashboards",
+      "breakpoints": true
     }
   ]
 }

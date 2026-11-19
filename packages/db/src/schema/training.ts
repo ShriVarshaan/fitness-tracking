@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { bigint, bigserial, check, date, index, integer, jsonb, pgTable, real, text } from "drizzle-orm/pg-core";
-import { createdAt, ownerPolicy, userId } from "./_shared";
+import { createdAt, ownerPolicy, updatedAt, userId } from "./_shared";
 
 /** A training plan made from a template, or by hand. Plans live in the app (pushing to the watch needs Garmin Starter). */
 export const trainingPlans = pgTable(
@@ -52,5 +52,23 @@ export const plannedWorkouts = pgTable(
     check("planned_workouts_steps_size", sql`jsonb_array_length(${t.steps}) <= 30`),
     check("planned_workouts_notes_length", sql`${t.notes} is null or char_length(${t.notes}) <= 500`),
     ownerPolicy("planned_workouts"),
+  ],
+).enableRLS();
+
+/** Saved dashboards from the chart builder; `panels` is validated by apps/web/src/lib/dashboard.ts. */
+export const dashboards = pgTable(
+  "dashboards",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: userId(),
+    name: text("name").notNull(),
+    panels: jsonb("panels").$type<unknown[]>().notNull().default([]),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check("dashboards_name_length", sql`char_length(${t.name}) between 1 and 60`),
+    check("dashboards_panels_size", sql`jsonb_array_length(${t.panels}) <= 12`),
+    ownerPolicy("dashboards"),
   ],
 ).enableRLS();
