@@ -18,7 +18,7 @@ export interface InsightAction {
 }
 
 export interface Insight {
-  kind: "morning" | "post_workout" | "weekly";
+  kind: "morning" | "post_workout" | "evening" | "weekly";
   forDate: string;
   headline: string;
   body: string[];

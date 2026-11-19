@@ -13,7 +13,7 @@ export const sleepShort: Rule = {
       severity: "info",
       confidence: 1,
       evidence: [
-        { id: "sleep_last_night", metric: "sleep_total", label: "Sleep last night", value: actual, unit: "s", baseline: ctx.sleepNeedS, window: "last night", source: "garmin" },
+        { id: "sleep_last_night", metric: "sleep_total", label: "Sleep last night", value: actual, unit: "s", baseline: ctx.sleepNeedS, baselineLabel: "need", window: "last night", source: "garmin" },
       ],
     };
   },

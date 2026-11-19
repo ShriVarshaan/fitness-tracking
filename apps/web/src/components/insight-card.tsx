@@ -3,7 +3,7 @@ import { formatValue, type Insight } from "@ft/advice";
 
 const CONFIDENCE_TEXT = { high: "High confidence", medium: "Medium confidence", low: "Low confidence" } as const;
 
-const KIND_TEXT: Record<Insight["kind"], string> = { morning: "This morning", post_workout: "After your workout", weekly: "Weekly summary" };
+const KIND_TEXT: Record<Insight["kind"], string> = { morning: "This morning", post_workout: "After your workout", evening: "This evening", weekly: "Weekly summary" };
 
 /** An insight: text from rules and templates, with the numbers behind it shown as chips. */
 export function InsightCard({ insight, link }: { insight: Insight; link?: { href: string; label: string } }) {
@@ -49,7 +49,7 @@ export function InsightCard({ insight, link }: { insight: Insight; link?: { href
             {chips.map((e) => (
               <li key={e.id} className="rounded-full border border-border px-2.5 py-1 text-xs">
                 {e.label}: <span className="font-medium tabular-nums">{formatValue(e.value, e.unit)}</span>
-                {e.baseline !== undefined && <span className="text-muted"> (usual {formatValue(e.baseline, e.unit)})</span>}
+                {e.baseline !== undefined && <span className="text-muted"> ({e.baselineLabel ?? "usual"} {formatValue(e.baseline, e.unit)})</span>}
                 <span className="text-muted"> · {e.source === "garmin" ? "Garmin" : "estimate"}</span>
               </li>
             ))}

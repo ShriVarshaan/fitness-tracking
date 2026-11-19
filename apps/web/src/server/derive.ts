@@ -1,6 +1,6 @@
 import "server-only";
-import { morningInsight, postWorkoutInsight, rewordInsight, rewordKey, validateInsight, weeklyInsight, type Insight } from "@ft/advice";
-import { addDays, daysBetween } from "@ft/core";
+import { eveningInsight, morningInsight, postWorkoutInsight, rewordInsight, rewordKey, validateInsight, weeklyInsight, type Insight } from "@ft/advice";
+import { addDays, daysBetween, localNow } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import { sportName } from "@/lib/activity";
 import { aiGenerate } from "./ai";
@@ -9,19 +9,21 @@ import {
   activityTrimp,
   buildRuleContext,
   deriveAll,
+  eveningEvidence,
   evaluateRules,
   hrMaxFromActivities,
   latestSession,
   sessionEvidence,
   weekStart,
   weekStats,
+  WAKE_MIN_NIGHTS,
   weeklyEvidence,
   type DeriveInputs,
   type DerivedRow,
   type SessionInput,
   type WeeklyInputs,
 } from "@ft/metrics";
-import { and, asc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 
 const { activities, activityStreams, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
 
@@ -29,6 +31,11 @@ const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
 /** Rules are evaluated (and findings kept) for this many recent days. */
 const FINDINGS_DAYS = 30;
+/** The evening check-in is written from this local hour, and refreshed at most this often. */
+const EVENING_FROM_HOUR = 18;
+const EVENING_REFRESH_MS = 2 * 3_600_000;
+/** Recent nights used for the usual wake time. */
+const WAKE_NIGHTS = 14;
 /** A post-workout summary is written only for a session this many days before the latest data, or fewer. */
 const POST_WORKOUT_MAX_AGE_DAYS = 2;
 
@@ -74,10 +81,14 @@ type Inputs = DeriveInputs & {
   activityDurations: Array<{ date: string; durationS: number | null }>;
   /** Per-activity details for the post-workout summary (load filled in later). */
   sessions: Array<Omit<SessionInput, "load"> & { sport: string; recordId: string | null }>;
+  stepsGoal: Map<string, number>;
+  /** Local wake times (minutes after midnight) of recent nights, newest first. */
+  wakes: Array<{ date: string; wakeMin: number }>;
+  timezone: string;
 };
 
 async function loadInputs(db: Db, userId: string): Promise<Inputs> {
-  const [hrv, days, nights, acts, prof] = await Promise.all([
+  const [hrv, days, nights, acts, prof, wakeRows] = await Promise.all([
     db
       .select({ date: hrvDaily.localDate, value: hrvDaily.lastNightAvgMs })
       .from(hrvDaily)
@@ -90,6 +101,7 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
         steps: dailySummaries.steps,
         moderate: dailySummaries.intensityMinModerate,
         vigorous: dailySummaries.intensityMinVigorous,
+        stepsGoal: dailySummaries.stepsGoal,
       })
       .from(dailySummaries)
       .where(eq(dailySummaries.userId, userId))
@@ -120,7 +132,13 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       })
       .from(activities)
       .where(eq(activities.userId, userId)),
-    db.query.profile.findFirst({ columns: { sleepNeedMin: true }, where: eq(profile.userId, userId) }),
+    db.query.profile.findFirst({ columns: { sleepNeedMin: true, timezone: true }, where: eq(profile.userId, userId) }),
+    db
+      .select({ date: sleepSessions.localDate, end: sleepSessions.endTime, tz: sleepSessions.tzOffsetMin })
+      .from(sleepSessions)
+      .where(eq(sleepSessions.userId, userId))
+      .orderBy(desc(sleepSessions.localDate))
+      .limit(WAKE_NIGHTS),
   ]);
 
   // Per-second HR and time from decoded activity files (for HR max and stream-based zones).
@@ -152,6 +170,12 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
     daily: days.map((d) => ({ date: d.date, steps: d.steps, moderate: d.moderate, vigorous: d.vigorous })),
     activityDurations: acts.map((a) => ({ date: a.date, durationS: a.durationS })),
+    stepsGoal: new Map(days.flatMap((d) => (d.stepsGoal ? [[d.date, d.stepsGoal] as const] : []))),
+    wakes: wakeRows.map((w) => {
+      const local = w.end.getTime() / 60_000 + (w.tz ?? 0);
+      return { date: w.date, wakeMin: ((Math.round(local) % 1440) + 1440) % 1440 };
+    }),
+    timezone: prof?.timezone ?? "Europe/London",
     sessions: acts.map((a, i) => ({
       // Unique even without a source id, so the "typical session" never confuses two sessions.
       id: a.id ?? `row-${i}`,
@@ -213,6 +237,31 @@ function postWorkout(inputs: Inputs, latest: string, perDay: Array<{ date: strin
     sport: sportName(session.sport),
     dayFindings: perDay.find((d) => d.date === session.date)?.found ?? [],
   });
+}
+
+/** Evening check-in for today, once it is evening where the user is and today's data exists. */
+function evening(inputs: Inputs, rows: DerivedRow[], latest: string, now = new Date()): Insight | null {
+  const local = localNow(inputs.timezone, now);
+  if (local.date !== latest || local.hour < EVENING_FROM_HOUR) return null;
+  const day = inputs.daily.find((d) => d.date === latest);
+  const monday = weekStart(latest);
+  const weekDays = inputs.daily.filter((d) => d.date >= monday && d.date <= latest && (d.moderate != null || d.vigorous != null));
+  const value = (code: string) => rows.find((r) => r.localDate === latest && r.metricCode === code)?.value ?? null;
+  const wakes = inputs.wakes.filter((w) => w.date <= latest).map((w) => w.wakeMin);
+  return eveningInsight(
+    latest,
+    eveningEvidence({
+      date: latest,
+      steps: day?.steps ?? null,
+      stepsGoal: inputs.stepsGoal.get(latest) ?? null,
+      intensityWeekSoFar: weekDays.length ? weekDays.reduce((n, d) => n + (d.moderate ?? 0) + 2 * (d.vigorous ?? 0), 0) : null,
+      sessionsToday: inputs.sessions.filter((x) => x.date === latest).length,
+      loadToday: value("trimp_daily"),
+      sleepDebtS: value("sleep_debt"),
+      sleepNeedS: inputs.sleepNeedS,
+      recentWakeMin: wakes.length >= WAKE_MIN_NIGHTS ? wakes : [],
+    }),
+  );
 }
 
 async function storeDerived(db: Db, userId: string, rows: DerivedRow[]): Promise<void> {
@@ -278,6 +327,16 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
   const post = postWorkout(inputs, latest, perDay);
   if (post) await storeInsight(db, userId, post);
   for (const weekly of weeklyInsights(inputs, rows, latest)) await storeInsight(db, userId, weekly);
+
+  const eve = evening(inputs, rows, latest);
+  if (eve) {
+    // Steps change all evening: refresh at most every 2 hours, so syncs don't re-word it each time.
+    const existing = await db.query.insights.findFirst({
+      columns: { createdAt: true },
+      where: and(eq(insights.userId, userId), eq(insights.kind, "evening"), eq(insights.forDate, latest)),
+    });
+    if (!existing || Date.now() - existing.createdAt.getTime() > EVENING_REFRESH_MS) await storeInsight(db, userId, eve);
+  }
 }
 
 /** Optionally reword, validate and upsert one insight (keyed by user, kind and date). */

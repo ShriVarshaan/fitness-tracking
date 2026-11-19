@@ -15,7 +15,7 @@ export const detraining: Rule = {
       severity: "info",
       confidence: 1,
       evidence: [
-        { id: "ctl_now", metric: "ctl", label: "Fitness now", value: r1(now), unit: "load", baseline: r1(before), window: "vs 3 weeks ago", source: "estimate" },
+        { id: "ctl_now", metric: "ctl", label: "Fitness now", value: r1(now), unit: "load", baseline: r1(before), baselineLabel: "3 weeks ago", window: "vs 3 weeks ago", source: "estimate" },
       ],
     };
   },

@@ -76,23 +76,23 @@ export const WHO_WEEKLY_MIN = 150;
 export function weeklyEvidence(week: WeekStats, prev: WeekStats | null, sleepNeedS: number): Evidence[] {
   const ev: Evidence[] = [];
   const window = week.daysElapsed === 7 ? "Mon–Sun" : `Mon–${week.daysElapsed} days so far`;
-  ev.push({ id: "week_sessions", metric: "sessions", label: "Sessions", value: week.sessions, unit: "sessions", ...(prev ? { baseline: prev.sessions } : {}), window, source: "garmin" });
+  ev.push({ id: "week_sessions", metric: "sessions", label: "Sessions", value: week.sessions, unit: "sessions", ...(prev ? { baseline: prev.sessions, baselineLabel: "last week" } : {}), window, source: "garmin" });
   if (week.trainingS > 0) {
-    ev.push({ id: "week_training_time", metric: "training_time", label: "Training time", value: Math.round(week.trainingS), unit: "s", ...(prev ? { baseline: Math.round(prev.trainingS) } : {}), window, source: "garmin" });
+    ev.push({ id: "week_training_time", metric: "training_time", label: "Training time", value: Math.round(week.trainingS), unit: "s", ...(prev ? { baseline: Math.round(prev.trainingS), baselineLabel: "last week" } : {}), window, source: "garmin" });
   }
-  ev.push({ id: "week_load", metric: "trimp", label: "Training load", value: Math.round(week.load), unit: "load", ...(prev ? { baseline: Math.round(prev.load) } : {}), window, source: "estimate" });
+  ev.push({ id: "week_load", metric: "trimp", label: "Training load", value: Math.round(week.load), unit: "load", ...(prev ? { baseline: Math.round(prev.load), baselineLabel: "last week" } : {}), window, source: "estimate" });
   if (week.sleepAvgS !== null) {
-    ev.push({ id: "week_sleep_avg", metric: "sleep_total", label: "Average sleep", value: Math.round(week.sleepAvgS), unit: "s", baseline: sleepNeedS, window: `${week.sleepNights} nights`, source: "garmin" });
+    ev.push({ id: "week_sleep_avg", metric: "sleep_total", label: "Average sleep", value: Math.round(week.sleepAvgS), unit: "s", baseline: sleepNeedS, baselineLabel: "need", window: `${week.sleepNights} nights`, source: "garmin" });
   }
   if (week.hrvAvgMs !== null) {
-    ev.push({ id: "week_hrv_avg", metric: "hrv_rmssd_ms", label: "Average overnight HRV", value: r1(week.hrvAvgMs), unit: "ms", ...(prev?.hrvAvgMs != null ? { baseline: r1(prev.hrvAvgMs) } : {}), window, source: "garmin" });
+    ev.push({ id: "week_hrv_avg", metric: "hrv_rmssd_ms", label: "Average overnight HRV", value: r1(week.hrvAvgMs), unit: "ms", ...(prev?.hrvAvgMs != null ? { baseline: r1(prev.hrvAvgMs), baselineLabel: "last week" } : {}), window, source: "garmin" });
   }
   if (week.rhrAvgBpm !== null) {
-    ev.push({ id: "week_rhr_avg", metric: "resting_hr", label: "Average resting heart rate", value: r1(week.rhrAvgBpm), unit: "bpm", ...(prev?.rhrAvgBpm != null ? { baseline: r1(prev.rhrAvgBpm) } : {}), window, source: "garmin" });
+    ev.push({ id: "week_rhr_avg", metric: "resting_hr", label: "Average resting heart rate", value: r1(week.rhrAvgBpm), unit: "bpm", ...(prev?.rhrAvgBpm != null ? { baseline: r1(prev.rhrAvgBpm), baselineLabel: "last week" } : {}), window, source: "garmin" });
   }
   if (week.stepsAvg !== null) {
-    ev.push({ id: "week_steps_avg", metric: "steps", label: "Average daily steps", value: Math.round(week.stepsAvg), unit: "steps", ...(prev?.stepsAvg != null ? { baseline: Math.round(prev.stepsAvg) } : {}), window, source: "garmin" });
+    ev.push({ id: "week_steps_avg", metric: "steps", label: "Average daily steps", value: Math.round(week.stepsAvg), unit: "steps", ...(prev?.stepsAvg != null ? { baseline: Math.round(prev.stepsAvg), baselineLabel: "last week" } : {}), window, source: "garmin" });
   }
-  ev.push({ id: "week_intensity", metric: "intensity_minutes", label: "Intensity minutes", value: Math.round(week.intensityMin), unit: "min", baseline: WHO_WEEKLY_MIN, window, source: "garmin" });
+  ev.push({ id: "week_intensity", metric: "intensity_minutes", label: "Intensity minutes", value: Math.round(week.intensityMin), unit: "min", baseline: WHO_WEEKLY_MIN, baselineLabel: "WHO target", window, source: "garmin" });
   return ev;
 }

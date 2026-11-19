@@ -103,6 +103,7 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
 
   return (
     <div className="space-y-4">
+      {data.evening && <InsightCard insight={data.evening} />}
       {data.insight && <InsightCard insight={data.insight} />}
       {data.postWorkout && (
         <InsightCard

@@ -31,6 +31,7 @@ export type Generate = (req: RewordRequest) => Promise<unknown>;
 const WHAT: Record<Insight["kind"], string> = {
   morning: "a short morning wellness summary",
   post_workout: "a short summary of a workout someone just did",
+  evening: "a short evening check-in about someone's day and tonight's sleep",
   weekly: "a short weekly wellness summary",
 };
 

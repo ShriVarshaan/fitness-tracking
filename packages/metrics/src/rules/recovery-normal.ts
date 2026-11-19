@@ -19,7 +19,7 @@ export const recoveryNormal: Rule = {
       evidence: [
         { id: "hrv_7d", metric: "hrv_rmssd_ms", label: "HRV, 7-night average", value: r1(hrv.rollingMs), unit: "ms", baseline: r1(hrv.baselineMs), window: "7-night average", source: "estimate" },
         { id: "rhr_today", metric: "resting_hr", label: "Resting heart rate today", value: rhr, unit: "bpm", baseline: r1(rhrBase.baselineBpm), window: "today", source: "garmin" },
-        { id: "sleep_last_night", metric: "sleep_total", label: "Sleep last night", value: sleep, unit: "s", baseline: ctx.sleepNeedS, window: "last night", source: "garmin" },
+        { id: "sleep_last_night", metric: "sleep_total", label: "Sleep last night", value: sleep, unit: "s", baseline: ctx.sleepNeedS, baselineLabel: "need", window: "last night", source: "garmin" },
       ],
     };
   },

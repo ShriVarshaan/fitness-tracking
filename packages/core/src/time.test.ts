@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { localDate, localDateFromGarmin, sleepLocalDate, addDays, daysBetween } from "./time";
+import { localDate, localDateFromGarmin, localNow, sleepLocalDate, addDays, daysBetween } from "./time";
 
 describe("localDate", () => {
   it("uses the event's own offset, not UTC", () => {
@@ -57,5 +57,20 @@ describe("date arithmetic on local dates", () => {
 
   it("rejects malformed dates", () => {
     expect(() => addDays("2026-13-01", 1)).toThrow(/date/);
+  });
+});
+
+describe("localNow", () => {
+  it("gives the local date and hour in a time zone, across DST and midnight", () => {
+    // 17:30 UTC on 19 Nov is 17:30 in London (GMT) and 04:30 on 20 Nov in Sydney (AEDT).
+    const t = new Date("2026-11-19T17:30:00Z");
+    expect(localNow("Europe/London", t)).toEqual({ date: "2026-11-19", hour: 17 });
+    expect(localNow("Australia/Sydney", t)).toEqual({ date: "2026-11-20", hour: 4 });
+    // Summer time: 17:30 UTC is 18:30 BST.
+    expect(localNow("Europe/London", new Date("2026-06-19T17:30:00Z"))).toEqual({ date: "2026-06-19", hour: 18 });
+  });
+
+  it("falls back to London for an unknown zone", () => {
+    expect(localNow("Not/AZone", new Date("2026-11-19T23:30:00Z"))).toEqual({ date: "2026-11-19", hour: 23 });
   });
 });

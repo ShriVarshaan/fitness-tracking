@@ -54,3 +54,15 @@ export function addDays(date: LocalDate, days: number): LocalDate {
 export function daysBetween(from: LocalDate, to: LocalDate): number {
   return Math.round((parse(to) - parse(from)) / DAY_MS);
 }
+
+/** Local date and hour now in a time zone ("2026-11-19", 18). */
+export function localNow(timezone: string, now = new Date()): { date: string; hour: number } {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(now);
+  } catch {
+    return localNow("Europe/London", now);
+  }
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, hour: Number(get("hour")) };
+}

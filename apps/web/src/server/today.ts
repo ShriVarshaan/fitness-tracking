@@ -61,6 +61,8 @@ export interface TodayData {
   derived: Map<string, Map<string, DerivedValue>>;
   /** Latest morning insight, if it passed validation. */
   insight: Insight | null;
+  /** Today's evening check-in (written from 18:00 local), if it passed validation. */
+  evening: Insight | null;
   /** Summary of the latest workout, if recent and it passed validation. */
   postWorkout: Insight | null;
   /** Activities in the 30-day window, and the date of the most recent one ever. */
@@ -90,6 +92,7 @@ export async function loadToday(): Promise<TodayData> {
       derived: new Map(),
       insight: null,
       postWorkout: null,
+      evening: null,
       activities: { inWindow: 0, lastDate: null },
       isDemo: false,
       connection: connection ?? null,
@@ -106,6 +109,7 @@ export async function loadToday(): Promise<TodayData> {
     { data: postRow },
     { count: activitiesInWindow },
     { data: lastActivity },
+    { data: eveningRow },
   ] = await Promise.all([
     supabase
       .from("daily_summaries")
@@ -151,6 +155,7 @@ export async function loadToday(): Promise<TodayData> {
       .maybeSingle(),
     supabase.from("activities").select("*", { count: "exact", head: true }).gte("local_date", from).lte("local_date", latestDate),
     supabase.from("activities").select("local_date").order("start_time", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("insights").select("body, validator_ok").eq("kind", "evening").eq("for_date", latestDate).maybeSingle(),
   ]);
 
   const derivedByMetric = new Map<string, Map<string, DerivedValue>>();
@@ -171,6 +176,7 @@ export async function loadToday(): Promise<TodayData> {
     // Only show insights that passed the hard checks.
     insight: insightRow?.validator_ok ? (insightRow.body as Insight) : null,
     postWorkout: postRow?.validator_ok ? (postRow.body as Insight) : null,
+    evening: eveningRow?.validator_ok ? (eveningRow.body as Insight) : null,
     activities: { inWindow: activitiesInWindow ?? 0, lastDate: (lastActivity?.local_date as string | undefined) ?? null },
     isDemo: latest?.source === "demo",
     connection: connection ?? null,

@@ -33,6 +33,11 @@ export function formatValue(value: number, unit: string): string {
       return `${Math.round(value)}/10`;
     case "load":
       return `${Math.round(value)}`;
+    case "clock": {
+      // Minutes after local midnight → "22:30".
+      const m = ((Math.round(value) % 1440) + 1440) % 1440;
+      return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    }
     default:
       return `${Math.round(value * 10) / 10}`;
   }

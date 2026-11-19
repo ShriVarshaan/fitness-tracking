@@ -11,6 +11,8 @@ export interface Evidence {
   value: number;
   unit: string;
   baseline?: number;
+  /** What the baseline is, for display: "usual" (default), "goal", "target", "need", "last week"… */
+  baselineLabel?: string;
   /** Human description of the window, e.g. "7-night average". */
   window: string;
   source: "garmin" | "estimate";
