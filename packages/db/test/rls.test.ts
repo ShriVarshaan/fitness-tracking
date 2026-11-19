@@ -34,6 +34,7 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
     sql`insert into activity_streams (user_id, source_record_id, stream, values) values (${u}, 'a1', 'hr', '{140,141}')`,
   activity_laps: (u) =>
     sql`insert into activity_laps (user_id, source_record_id, idx, start_time) values (${u}, 'a1', 0, now())`,
+  activity_feedback: (u) => sql`insert into activity_feedback (user_id, source_record_id, rpe) values (${u}, 'a1', 6)`,
   activity_sets: (u) => sql`insert into activity_sets (user_id, source_record_id, idx, reps) values (${u}, 'a1', 0, 8)`,
   derived_daily: (u) =>
     sql`insert into derived_daily (user_id, local_date, metric_code, value, algo_version, inputs_hash) values (${u}, '2026-01-01', 'readiness', 60, 1, 'h')`,
@@ -139,6 +140,19 @@ describe("isolation between users", () => {
     await expect(as("authenticated", B, (tx) => tx`insert into profile (user_id) values (${A})`)).rejects.toThrow(
       /row-level security|duplicate key/,
     );
+  });
+});
+
+describe("user-written tables", () => {
+  it("activity_feedback: the owner can write their own rating, but not for someone else", async () => {
+    const updated = await as("authenticated", A, (tx) => tx`update activity_feedback set rpe = 7 where user_id = ${A} returning rpe`);
+    expect(updated).toEqual([{ rpe: 7 }]);
+    const foreign = await as("authenticated", B, (tx) => tx`update activity_feedback set rpe = 1 where user_id = ${A} returning rpe`);
+    expect(foreign).toHaveLength(0);
+    await expect(
+      as("authenticated", B, (tx) => tx`insert into activity_feedback (user_id, source_record_id, rpe) values (${A}, 'a2', 5)`),
+    ).rejects.toThrow(/row-level security/);
+    await expect(as("authenticated", A, (tx) => tx`update activity_feedback set rpe = 11 where user_id = ${A}`)).rejects.toThrow(/check constraint/);
   });
 });
 

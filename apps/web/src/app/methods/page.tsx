@@ -47,6 +47,12 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
     source: "Our own heuristic over Edwards TRIMP. The 1.5 and 0.6 cut-offs are not from a study.",
   },
   {
+    name: "Session effort load",
+    how: "Your effort rating for the whole session (1–10, rated about 30 minutes after finishing) multiplied by its length in minutes. It works for sessions without heart rate, such as strength work. It is on a different scale from training load, so the two are shown side by side and never added together.",
+    needs: "An effort rating, entered on the activity page or on the watch.",
+    source: "Session-RPE: Foster et al. 2001, Journal of Strength and Conditioning Research 15:109–115.",
+  },
+  {
     name: "Fitness, fatigue and form",
     how: "Fitness is an exponentially weighted average of daily load over about 42 days, fatigue over about 7 days. Form is yesterday's fitness minus yesterday's fatigue.",
     needs: "Full confidence after 42 days of history.",

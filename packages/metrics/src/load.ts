@@ -140,3 +140,14 @@ export function acwr(dailyLoad: ReadonlyMap<LocalDate, number>, from: LocalDate,
   }
   return out;
 }
+
+/**
+ * Session-RPE load = CR-10 effort rating × session minutes (arbitrary units).
+ * Foster et al. 2001, J Strength Cond Res 15:109–115. A different scale from
+ * Edwards TRIMP, so it is shown alongside it and never added to it.
+ * Null without a rating in 1–10 or a positive duration.
+ */
+export function sessionRpeLoad(rpe: number | null | undefined, durationS: number | null | undefined): number | null {
+  if (rpe == null || !(rpe >= 1 && rpe <= 10) || durationS == null || !(durationS > 0)) return null;
+  return Math.round(rpe * (durationS / 60));
+}

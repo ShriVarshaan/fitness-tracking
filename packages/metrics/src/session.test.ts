@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityTrimp } from "./load";
+import { activityTrimp, sessionRpeLoad } from "./load";
 import { latestSession, sessionEvidence, typicalSessionLoad, type SessionInput } from "./session";
 
 const base: Omit<SessionInput, "id" | "date" | "startTime" | "load"> = {
@@ -91,5 +91,20 @@ describe("activityTrimp", () => {
     const hr = timeS.map(() => 152);
     expect(activityTrimp({ zoneSeconds: null, hrStream: { timeS, hr } }, 190)).toEqual({ value: 8, fromStream: true });
     expect(activityTrimp({ zoneSeconds: null, hrStream: { timeS, hr } }, null)).toEqual({ value: null, fromStream: false });
+  });
+});
+
+describe("sessionRpeLoad", () => {
+  it("is effort × minutes (Foster 2001)", () => {
+    // RPE 7 for 45 min → 315.
+    expect(sessionRpeLoad(7, 2700)).toBe(315);
+    expect(sessionRpeLoad(4, 1830)).toBe(122); // 30.5 min × 4 = 122
+  });
+  it("needs a 1–10 rating and a duration", () => {
+    expect(sessionRpeLoad(null, 2700)).toBeNull();
+    expect(sessionRpeLoad(0, 2700)).toBeNull();
+    expect(sessionRpeLoad(11, 2700)).toBeNull();
+    expect(sessionRpeLoad(5, 0)).toBeNull();
+    expect(sessionRpeLoad(5, null)).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ export const EXPORT_TABLES = [
   "activities",
   "activity_laps",
   "activity_sets",
+  "activity_feedback",
   "activity_streams",
   "derived_daily",
   "findings",

@@ -1,6 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   date,
   index,
   integer,
@@ -12,7 +14,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { ownerReadPolicy, userId } from "./_shared";
+import { ownerPolicy, ownerReadPolicy, userId } from "./_shared";
 
 /** Provenance columns on every source-derived row (docs/PLAN.md §5). */
 const provenance = () => ({
@@ -232,4 +234,27 @@ export const activitySets = pgTable(
     durationS: real("duration_s"),
   },
   (t) => [primaryKey({ columns: [t.userId, t.source, t.sourceRecordId, t.idx] }), ownerReadPolicy("activity_sets")],
+).enableRLS();
+
+/**
+ * The user's own rating of a session, entered in the app: effort on the CR-10
+ * scale (1–10) and an optional note. Takes precedence over a rating from the
+ * watch. Owner may read and write their own rows.
+ */
+export const activityFeedback = pgTable(
+  "activity_feedback",
+  {
+    userId: userId(),
+    source: text("source").notNull().default("garmin"),
+    sourceRecordId: text("source_record_id").notNull(),
+    rpe: smallint("rpe"),
+    note: text("note"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.source, t.sourceRecordId] }),
+    check("activity_feedback_rpe_range", sql`${t.rpe} is null or ${t.rpe} between 1 and 10`),
+    check("activity_feedback_note_length", sql`${t.note} is null or char_length(${t.note}) <= 500`),
+    ownerPolicy("activity_feedback"),
+  ],
 ).enableRLS();

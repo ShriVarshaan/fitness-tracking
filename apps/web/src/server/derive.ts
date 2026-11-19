@@ -26,7 +26,7 @@ import {
 } from "@ft/metrics";
 import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 
-const { activities, activityStreams, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
+const { activities, activityFeedback, activityStreams, dailySummaries, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
 
 const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
@@ -89,7 +89,7 @@ type Inputs = DeriveInputs & {
 };
 
 async function loadInputs(db: Db, userId: string): Promise<Inputs> {
-  const [hrv, days, nights, acts, prof, wakeRows] = await Promise.all([
+  const [hrv, days, nights, acts, prof, wakeRows, feedback] = await Promise.all([
     db
       .select({ date: hrvDaily.localDate, value: hrvDaily.lastNightAvgMs })
       .from(hrvDaily)
@@ -140,7 +140,13 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .where(eq(sleepSessions.userId, userId))
       .orderBy(desc(sleepSessions.localDate))
       .limit(WAKE_NIGHTS),
+    db
+      .select({ source: activityFeedback.source, id: activityFeedback.sourceRecordId, rpe: activityFeedback.rpe })
+      .from(activityFeedback)
+      .where(eq(activityFeedback.userId, userId)),
   ]);
+  // A rating entered in the app takes precedence over one from the watch.
+  const appRpe = new Map(feedback.flatMap((f) => (f.rpe == null ? [] : [[`${f.source}:${f.id}`, f.rpe] as const])));
 
   // Per-second HR and time from decoded activity files (for HR max and stream-based zones).
   const streamRows = await db
@@ -188,7 +194,7 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       distanceM: a.distanceM,
       avgHr: a.avgHr,
       aerobicTe: a.aerobicTe,
-      rpe: a.rpe,
+      rpe: appRpe.get(`${a.source}:${a.id}`) ?? a.rpe,
     })),
   };
 }

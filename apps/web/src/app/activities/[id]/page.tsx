@@ -8,6 +8,8 @@ import { RouteMap } from "@/components/route-map";
 import { StreamChart } from "@/components/stream-chart";
 import { exerciseName, formatElapsed, formatPace, toPace, type Series } from "@/lib/streams";
 import { activityLoad, isCycling, pacePerKm, sportName, usesPace } from "@/lib/activity";
+import { sessionRpeLoad } from "@ft/metrics";
+import { FeedbackForm } from "./feedback-form";
 import { formatDay, formatDuration, formatKm, formatNumber, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -77,12 +79,12 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
   if (!data) notFound();
   const a = data as Activity;
   // Our load estimate for this activity, from the day's derived row (Garmin zones or the HR stream).
-  const { data: loadRow } = await supabase
-    .from("derived_daily")
-    .select("components")
-    .eq("metric_code", "trimp_daily")
-    .eq("local_date", a.local_date)
-    .maybeSingle();
+  const [{ data: loadRow }, { data: feedback }] = await Promise.all([
+    supabase.from("derived_daily").select("components").eq("metric_code", "trimp_daily").eq("local_date", a.local_date).maybeSingle(),
+    supabase.from("activity_feedback").select("rpe, note").eq("source", a.source).eq("source_record_id", id).maybeSingle(),
+  ]);
+  const rpe = (feedback?.rpe as number | null | undefined) ?? a.rpe;
+  const srpe = sessionRpeLoad(rpe, a.duration_s);
   const load = activityLoad(loadRow?.components, id);
   const streams = new Map((streamRows ?? []).map((s) => [s.stream as string, s.values as Series]));
 
@@ -103,7 +105,7 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
     ["Cadence", a.avg_cadence ? formatNumber(a.avg_cadence) : null],
     ["Calories", a.kcal ? `${formatNumber(a.kcal)} kcal` : null],
     ["Laps", a.lap_count ? String(a.lap_count) : null],
-    ["Effort (RPE)", a.rpe != null ? `${formatNumber(a.rpe, a.rpe % 1 ? 1 : 0)} / 10` : null],
+    ["Effort (RPE)", rpe != null ? `${formatNumber(rpe, rpe % 1 ? 1 : 0)} / 10` : null],
   ];
 
   return (
@@ -169,6 +171,24 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
           </p>
         </section>
       )}
+
+      <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-medium text-muted">Your rating</h2>
+          {srpe !== null && (
+            <span className="text-sm">
+              Session effort load <strong className="font-semibold tabular-nums">{formatNumber(srpe)}</strong>{" "}
+              <span className="text-xs text-muted">
+                · Estimate ·{" "}
+                <Link href="/methods" className="underline">
+                  effort × minutes
+                </Link>
+              </span>
+            </span>
+          )}
+        </div>
+        <FeedbackForm id={id} source={a.source} rpe={(feedback?.rpe as number | null | undefined) ?? null} note={(feedback?.note as string | null | undefined) ?? null} watchRpe={a.rpe} />
+      </section>
 
       {(a.aerobic_te !== null || a.source_training_load !== null) && (
         <section className="space-y-2 rounded-lg border border-border bg-surface p-5">
