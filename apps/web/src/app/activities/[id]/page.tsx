@@ -276,7 +276,7 @@ function ActivityDetail({ activity: a, streams, laps, sets }: { activity: Activi
       {route.length > 1 && (
         <section className="space-y-2">
           <RouteMap coordinates={route} />
-          <p className="text-xs text-muted">The first and last 200 m are hidden for privacy.</p>
+          <p className="text-xs text-muted">The first and last 200 m are hidden for privacy. Use 3D for terrain; drag with two fingers or right-click to tilt and turn.</p>
         </section>
       )}
 

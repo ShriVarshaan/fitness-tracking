@@ -40,7 +40,7 @@ export default function PrivacyPage() {
 
       <Section title="Who processes it">
         Supabase (database, login and encryption, hosted in Frankfurt, EU) and Vercel (hosting; your data passes through
-        its servers when pages load). Garmin provides your data under its own terms when you add your key. Activity maps load map images from OpenFreeMap, which sees which map area your browser shows but not your data.
+        its servers when pages load). Garmin provides your data under its own terms when you add your key. Activity maps load map images from OpenFreeMap (and, in 3D view, elevation images from Amazon Web Services&rsquo; open terrain dataset), which see which map area your browser shows but not your data.
         Food searches and barcode lookups are sent from our server to Open Food Facts with only the search words or
         barcode, never who you are; camera images for scanning stay on your device. No analytics
         or advertising services are used. AI is on by default: the numbers behind your summaries (such as HRV, resting
