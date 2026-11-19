@@ -52,12 +52,22 @@ describe("deriveAll", () => {
     // A 10-minute hard session sets HR max (p99 = 200); the strength session sits at 150 = 75% → zone 3.
     base.activities = [
       { date: "2026-01-01", zoneSeconds: [0, 0, 0, 600, 0], hrStream: { timeS: t, hr: t.map(() => 200) } },
-      { date: "2026-01-02", zoneSeconds: null, hrStream: { timeS: t, hr: t.map(() => 150) } },
+      { id: "gym", date: "2026-01-02", zoneSeconds: null, hrStream: { timeS: t, hr: t.map(() => 150) } },
+      { id: "walk", date: "2026-01-02", zoneSeconds: null },
     ];
     const rows = deriveAll(base);
     expect(pick(rows, "2026-01-02", "trimp_daily")).toMatchObject({
       value: 30, // 10 min × zone 3
-      components: { activitiesWithoutHrZones: 0, zonesFromHrStream: 1, hrMaxBpm: 200 },
+      components: {
+        activitiesWithoutHrZones: 1,
+        zonesFromHrStream: 1,
+        hrMaxBpm: 200,
+        // Per-activity loads, so the activity page can show a load that came from the stream.
+        activities: [
+          { id: "gym", load: 30, fromStream: true },
+          { id: "walk", load: null, fromStream: false },
+        ],
+      },
     });
   });
 

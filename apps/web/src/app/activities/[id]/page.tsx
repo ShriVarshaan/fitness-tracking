@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { edwardsTrimp } from "@ft/metrics";
 import type { Insight } from "@ft/advice";
 import { AppNav } from "@/components/app-nav";
 import { InsightCard } from "@/components/insight-card";
 import { RouteMap } from "@/components/route-map";
 import { StreamChart } from "@/components/stream-chart";
 import { exerciseName, formatElapsed, formatPace, toPace, type Series } from "@/lib/streams";
-import { isCycling, pacePerKm, sportName, usesPace } from "@/lib/activity";
+import { activityLoad, isCycling, pacePerKm, sportName, usesPace } from "@/lib/activity";
 import { formatDay, formatDuration, formatKm, formatNumber, titleCase } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -77,11 +76,18 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
   const postWorkout = postRow?.validator_ok ? (postRow.body as Insight) : null;
   if (!data) notFound();
   const a = data as Activity;
+  // Our load estimate for this activity, from the day's derived row (Garmin zones or the HR stream).
+  const { data: loadRow } = await supabase
+    .from("derived_daily")
+    .select("components")
+    .eq("metric_code", "trimp_daily")
+    .eq("local_date", a.local_date)
+    .maybeSingle();
+  const load = activityLoad(loadRow?.components, id);
   const streams = new Map((streamRows ?? []).map((s) => [s.stream as string, s.values as Series]));
 
   const zones = a.hr_zone_s;
   const zoneTotal = zones?.reduce((s, z) => s + z, 0) ?? 0;
-  const trimp = edwardsTrimp(zones);
 
   const stats: Array<[string, string | null]> = [
     ["Duration", formatDuration(a.duration_s)],
@@ -149,17 +155,18 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
               </li>
             ))}
           </ul>
-          {trimp !== null && (
-            <p className="text-sm">
-              Training load <strong className="font-semibold tabular-nums">{formatNumber(trimp)}</strong>{" "}
-              <span className="text-xs text-muted">
-                · Estimate ·{" "}
-                <Link href="/methods" className="underline">
-                  our formula
-                </Link>
-              </span>
-            </p>
-          )}
+          {load?.load != null && !load.fromStream && <LoadLine load={load.load} />}
+        </section>
+      )}
+
+      {load?.load != null && load.fromStream && (
+        <section className="space-y-1 rounded-lg border border-border bg-surface p-5">
+          <h2 className="text-sm font-medium text-muted">Training load</h2>
+          <LoadLine load={load.load} />
+          <p className="text-xs text-muted">
+            Garmin gave no heart-rate zones for this activity, so the zones were worked out from its per-second heart rate
+            {load.hrMaxBpm ? ` against your highest recorded heart rate (${load.hrMaxBpm} bpm)` : ""}.
+          </p>
         </section>
       )}
 
@@ -187,7 +194,7 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
         </section>
       )}
 
-      {!zones && (
+      {!zones && load?.load == null && (
         <p className="text-sm text-muted">
           Not available: heart-rate zones for this activity, so it adds nothing to the training load estimate.
         </p>
@@ -196,6 +203,20 @@ export default async function ActivityPage(props: PageProps<"/activities/[id]">)
         <p className="text-sm text-muted">Charts, laps and sets appear once the activity file has been fetched from Garmin.</p>
       )}
     </main>
+  );
+}
+
+function LoadLine({ load }: { load: number }) {
+  return (
+    <p className="text-sm">
+      Training load <strong className="font-semibold tabular-nums">{formatNumber(load)}</strong>{" "}
+      <span className="text-xs text-muted">
+        · Estimate ·{" "}
+        <Link href="/methods" className="underline">
+          our formula
+        </Link>
+      </span>
+    </p>
   );
 }
 

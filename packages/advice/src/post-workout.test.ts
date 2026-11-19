@@ -39,7 +39,7 @@ describe("postWorkoutInsight", () => {
     expect(insight.headline).toBe("A typical running session");
     expect(insight.body).toEqual([
       "You did 50m of running, covering 10.1 km, at an average heart rate of 151 bpm.",
-      "Its training load was 95, close to your typical session (90).",
+      "Its training load was 95, close to your typical running session (90).",
     ]);
     expect(insight.actions).toEqual([]);
     expect(insight.confidence).toBe("high");
@@ -50,7 +50,7 @@ describe("postWorkoutInsight", () => {
   it("flags a big session with a cited recovery action", () => {
     const insight = postWorkoutInsight("2026-11-16", run(ev("session_load", 180, "load", 90), [ev("session_rpe", 8, "/10")]), ctx());
     expect(insight.headline).toBe("A big running session");
-    expect(insight.body).toContain("Its training load was 180, well above your typical session (90).");
+    expect(insight.body).toContain("Its training load was 180, well above your typical running session (90).");
     expect(insight.body).toContain("You rated the effort 8/10.");
     expect(insight.actions.map((a) => a.evidenceIds)).toEqual([["session_load"]]);
     expect(validateInsight(insight).ok).toBe(true);
@@ -76,7 +76,7 @@ describe("postWorkoutInsight", () => {
     const noBaseline = postWorkoutInsight("2026-11-16", run(ev("session_load", 95, "load")), ctx());
     expect(noBaseline.headline).toBe("Running: 50m");
     expect(noBaseline.confidence).toBe("medium");
-    expect(noBaseline.missingData).toEqual(["Comparison: fewer than 3 earlier sessions with heart rate in the last 4 weeks"]);
+    expect(noBaseline.missingData).toEqual(["Comparison: fewer than 3 earlier running sessions with heart rate in the last 4 weeks"]);
 
     const noHr = postWorkoutInsight("2026-11-16", [ev("session_duration", 2700, "s")], { ...ctx(), sport: "Strength training" });
     expect(noHr.body).toEqual(["You did 45m of strength training."]);

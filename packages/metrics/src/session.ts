@@ -4,6 +4,8 @@ import { r1, type Evidence } from "./rules/types";
 /** One recorded session, as the post-workout summary sees it. */
 export interface SessionInput {
   id: string;
+  /** Garmin sport key, e.g. "running"; sessions are only compared with the same sport. */
+  sport: string;
   date: LocalDate;
   /** Start instant (ISO), used to order sessions on the same day. */
   startTime: string;
@@ -18,7 +20,7 @@ export interface SessionInput {
   rpe: number | null;
 }
 
-/** Sessions in the 28 days before this one form "your typical session". */
+/** Sessions of the same sport in the 28 days before this one form "your typical session". */
 export const TYPICAL_WINDOW_DAYS = 28;
 /** Fewer earlier sessions with a load than this and there is no comparison. */
 export const TYPICAL_MIN_SESSIONS = 3;
@@ -29,14 +31,18 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
+/** "tennis_v2" → "tennis", "strength_training" → "strength training". */
+export const sportLabel = (sport: string) => sport.replace(/_v\d+$/, "").replace(/_/g, " ").toLowerCase();
+
 /**
- * Typical session load: the median Edwards TRIMP of sessions in the 28 days
- * before this one (excluding it). Median, not mean, so one race or one short
+ * Typical session load: the median Edwards TRIMP of sessions of the same sport
+ * in the 28 days before this one (excluding it). A gym session and a long run
+ * load the body differently, so mixing sports would make the comparison meaningless. Median, not mean, so one race or one short
  * walk doesn't move it much. Null with fewer than 3 earlier sessions.
  */
 export function typicalSessionLoad(session: SessionInput, all: readonly SessionInput[]): { value: number; sessions: number } | null {
   const earlier = all.filter((s) => {
-    if (s.id === session.id || s.load === null) return false;
+    if (s.id === session.id || s.load === null || s.sport !== session.sport) return false;
     const ago = daysBetween(s.date, session.date);
     if (ago < 0 || ago > TYPICAL_WINDOW_DAYS) return false;
     return ago > 0 || s.startTime < session.startTime;
@@ -75,7 +81,9 @@ export function sessionEvidence(session: SessionInput, all: readonly SessionInpu
       value: Math.round(session.load),
       unit: "load",
       ...(typical ? { baseline: Math.round(typical.value) } : {}),
-      window: typical ? `this session vs median of ${typical.sessions} sessions in the previous ${TYPICAL_WINDOW_DAYS} days` : window,
+      window: typical
+        ? `this session vs median of ${typical.sessions} ${sportLabel(session.sport)} sessions in the previous ${TYPICAL_WINDOW_DAYS} days`
+        : window,
       source: "estimate",
     });
   }

@@ -44,14 +44,18 @@ export function postWorkoutInsight(forDate: string, evidence: Evidence[], ctx: P
   const size = ratio === null ? null : ratio >= BIG_SESSION_RATIO ? "big" : ratio <= EASY_SESSION_RATIO ? "easy" : "typical";
   if (load && ratio !== null) {
     const compare =
-      size === "big" ? "well above your typical session" : size === "easy" ? "well below your typical session" : "close to your typical session";
+      size === "big"
+        ? `well above your typical ${sport} session`
+        : size === "easy"
+          ? `well below your typical ${sport} session`
+          : `close to your typical ${sport} session`;
     body.push(`Its training load was ${fmt(load)}, ${compare} (${fmtBaseline(load)}).`);
     if (size === "big") {
       actions.push({ text: "Make tomorrow easier and protect your sleep tonight, so your body can absorb it.", evidenceIds: ["session_load"] });
     }
   } else if (load) {
     body.push(`Its training load was ${fmt(load)}.`);
-    missingData.push("Comparison: fewer than 3 earlier sessions with heart rate in the last 4 weeks");
+    missingData.push(`Comparison: fewer than 3 earlier ${sport} sessions with heart rate in the last 4 weeks`);
   } else {
     missingData.push("Training load: no heart-rate data for this session");
   }

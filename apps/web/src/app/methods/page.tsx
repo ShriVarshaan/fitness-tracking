@@ -36,8 +36,8 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
   },
   {
     name: "Typical session (after a workout)",
-    how: "The median training load of your sessions in the 28 days before this one. A session at 1.5 times that or more is called big, and one at 0.6 times or less is called easy. The median is used so one race or one short walk barely moves it.",
-    needs: "3 earlier sessions with heart-rate data in the last 28 days.",
+    how: "The median training load of your sessions of the same sport in the 28 days before this one, so a run is compared with runs and a gym session with gym sessions. A session at 1.5 times that or more is called big, and one at 0.6 times or less is called easy. The median is used so one race or one short walk barely moves it.",
+    needs: "3 earlier sessions of the same sport with heart-rate data in the last 28 days.",
     source: "Our own heuristic over Edwards TRIMP. The 1.5 and 0.6 cut-offs are not from a study.",
   },
   {

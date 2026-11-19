@@ -63,6 +63,8 @@ export interface TodayData {
   insight: Insight | null;
   /** Summary of the latest workout, if recent and it passed validation. */
   postWorkout: Insight | null;
+  /** Activities in the 30-day window, and the date of the most recent one ever. */
+  activities: { inWindow: number; lastDate: string | null };
   /** True when the data shown is synthetic demo data. */
   isDemo: boolean;
   connection: { status: string; key_expires_on: string | null; backfill_complete: boolean } | null;
@@ -88,13 +90,23 @@ export async function loadToday(): Promise<TodayData> {
       derived: new Map(),
       insight: null,
       postWorkout: null,
+      activities: { inWindow: 0, lastDate: null },
       isDemo: false,
       connection: connection ?? null,
     };
   }
 
   const from = addDays(latestDate, -(WINDOW_DAYS - 1));
-  const [{ data: days }, { data: hrv }, { data: sleep }, { data: derived }, { data: insightRow }, { data: postRow }] = await Promise.all([
+  const [
+    { data: days },
+    { data: hrv },
+    { data: sleep },
+    { data: derived },
+    { data: insightRow },
+    { data: postRow },
+    { count: activitiesInWindow },
+    { data: lastActivity },
+  ] = await Promise.all([
     supabase
       .from("daily_summaries")
       .select(
@@ -137,6 +149,8 @@ export async function loadToday(): Promise<TodayData> {
       .order("for_date", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("activities").select("*", { count: "exact", head: true }).gte("local_date", from).lte("local_date", latestDate),
+    supabase.from("activities").select("local_date").order("start_time", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   const derivedByMetric = new Map<string, Map<string, DerivedValue>>();
@@ -157,6 +171,7 @@ export async function loadToday(): Promise<TodayData> {
     // Only show insights that passed the hard checks.
     insight: insightRow?.validator_ok ? (insightRow.body as Insight) : null,
     postWorkout: postRow?.validator_ok ? (postRow.body as Insight) : null,
+    activities: { inWindow: activitiesInWindow ?? 0, lastDate: (lastActivity?.local_date as string | undefined) ?? null },
     isDemo: latest?.source === "demo",
     connection: connection ?? null,
   };

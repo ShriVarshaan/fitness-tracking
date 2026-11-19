@@ -15,6 +15,8 @@ export interface DeriveInputs {
   sleep: DatedValue[];
   /** One entry per activity: its local date and HR zone seconds (null if none). */
   activities: Array<{
+    /** Source record id, so per-activity loads can be shown on the activity page. */
+    id?: string | null;
     date: LocalDate;
     zoneSeconds: number[] | null;
     /** Per-second HR from the FIT file, when fetched. */
@@ -57,8 +59,14 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
   // Activities without Garmin zone times fall back to zones computed from their HR stream (v2).
   const hrMax = hrMaxFromActivities(inputs.activities.flatMap((a) => (a.hrStream ? [a.hrStream.hr] : [])));
   const fromStream = new Map<LocalDate, number>();
+  const perActivity = new Map<LocalDate, Array<{ id: string; load: number | null; fromStream: boolean }>>();
   for (const a of inputs.activities) {
     const { value: t, fromStream: viaStream } = activityTrimp(a, hrMax);
+    if (a.id) {
+      const list = perActivity.get(a.date) ?? [];
+      list.push({ id: a.id, load: t === null ? null : round(t, 1), fromStream: viaStream });
+      perActivity.set(a.date, list);
+    }
     if (viaStream) fromStream.set(a.date, (fromStream.get(a.date) ?? 0) + 1);
     if (t === null) missingLoad.set(a.date, (missingLoad.get(a.date) ?? 0) + 1);
     else dailyLoad.set(a.date, (dailyLoad.get(a.date) ?? 0) + t);
@@ -134,6 +142,7 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
       activitiesWithoutHrZones: missingLoad.get(date) ?? 0,
       zonesFromHrStream: fromStream.get(date) ?? 0,
       ...(fromStream.has(date) && hrMax ? { hrMaxBpm: hrMax } : {}),
+      ...(perActivity.has(date) ? { activities: [...perActivity.get(date)!].sort((x, y) => x.id.localeCompare(y.id)) } : {}),
     };
     push(date, "trimp_daily", day.load, loadComponents, 1, "trimp_edwards", [day.load, loadComponents]);
     // The PMC depends on the whole history up to this date; hash today's state.

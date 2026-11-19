@@ -171,7 +171,8 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
         atl={est("atl")}
         tsb={est("tsb")}
         acwr={est("acwr")}
-        loads={estSeries("trimp_daily")}
+        activities={data.activities}
+        withLoad={data.dates.reduce((n, d) => n + sessionsWithLoad(data.derived.get("trimp_daily")?.get(d)?.components), 0)}
         ctlTrend={estSeries("ctl")}
       />
     </div>
@@ -244,21 +245,27 @@ function LoadCard({
   atl,
   tsb,
   acwr,
-  loads,
+  activities,
+  withLoad,
   ctlTrend,
 }: {
   ctl: DerivedValue | undefined;
   atl: DerivedValue | undefined;
   tsb: DerivedValue | undefined;
   acwr: DerivedValue | undefined;
-  loads: Array<number | null>;
+  activities: { inWindow: number; lastDate: string | null };
+  withLoad: number;
   ctlTrend: Array<number | null>;
 }) {
-  const sessions = loads.filter((l) => (l ?? 0) > 0).length;
+  const n = activities.inWindow;
   return (
     <Card title="Training load">
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-sm text-muted">{sessions} session{sessions === 1 ? "" : "s"} with heart-rate zones in 30 days</span>
+        <span className="text-sm text-muted">
+          {n === 0
+            ? `No sessions in the last 30 days${activities.lastDate ? ` (last one ${formatDay(activities.lastDate)})` : ""}`
+            : `${n} session${n === 1 ? "" : "s"} in 30 days, ${withLoad} with heart-rate data`}
+        </span>
         {ctl && <EstimateTag confidence={ctl.confidence} />}
       </div>
       <dl className="grid grid-cols-3 gap-2 text-center">
@@ -281,6 +288,12 @@ function LoadCard({
       <Sparkline values={ctlTrend} label="Fitness (chronic load), last 30 days" />
     </Card>
   );
+}
+
+/** Activities on a day that got a load estimate (trimp_daily components; older rows lack the list). */
+function sessionsWithLoad(components: Record<string, unknown> | undefined): number {
+  const list = components?.activities;
+  return Array.isArray(list) ? list.filter((a) => a && typeof a === "object" && typeof (a as { load?: unknown }).load === "number").length : 0;
 }
 
 function SleepCard({ night }: { night: SleepNight | undefined }) {

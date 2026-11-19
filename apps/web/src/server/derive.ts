@@ -147,7 +147,7 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
     spo2Overnight: nights.flatMap((n) => (typeof n.spo2 === "number" ? [{ date: n.date, value: n.spo2 }] : [])),
     activities: acts.map((a) => {
       const s = streams.get(`${a.source}:${a.id}`);
-      return { date: a.date, zoneSeconds: a.zoneSeconds, hrStream: s?.timeS && s.hr ? { timeS: s.timeS, hr: s.hr } : null };
+      return { id: a.id, date: a.date, zoneSeconds: a.zoneSeconds, hrStream: s?.timeS && s.hr ? { timeS: s.timeS, hr: s.hr } : null };
     }),
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
     daily: days.map((d) => ({ date: d.date, steps: d.steps, moderate: d.moderate, vigorous: d.vigorous })),

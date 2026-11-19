@@ -3,6 +3,7 @@ import { activityTrimp } from "./load";
 import { latestSession, sessionEvidence, typicalSessionLoad, type SessionInput } from "./session";
 
 const base: Omit<SessionInput, "id" | "date" | "startTime" | "load"> = {
+  sport: "running",
   durationS: 3000,
   distanceM: 10_040,
   avgHr: 151,
@@ -35,6 +36,17 @@ describe("typicalSessionLoad", () => {
     const all = [s("a", "2026-11-01", 50), s("b", "2026-11-02", 70), s("am", "2026-11-04", 90, "06:00"), s("pm", "2026-11-04", 120, "18:00")];
     expect(typicalSessionLoad(all[3]!, all)).toEqual({ value: 70, sessions: 3 });
     expect(typicalSessionLoad(all[2]!, all)).toBeNull();
+  });
+
+  it("compares only with sessions of the same sport", () => {
+    const gym = (id: string, date: string, load: number) => ({ ...s(id, date, load), sport: "strength_training" });
+    const all = [s("a", "2026-11-01", 50), gym("g1", "2026-11-01", 300), s("b", "2026-11-02", 70), gym("g2", "2026-11-02", 300), s("c", "2026-11-03", 90), s("now", "2026-11-04", 80)];
+    // Running only: 50, 70, 90 → median 70 (the gym sessions would have pulled it to 185).
+    expect(typicalSessionLoad(all.at(-1)!, all)).toEqual({ value: 70, sessions: 3 });
+    expect(typicalSessionLoad(all[3]!, all)).toBeNull();
+    expect(sessionEvidence(all.at(-1)!, all).find((e) => e.id === "session_load")!.window).toBe(
+      "this session vs median of 3 running sessions in the previous 28 days",
+    );
   });
 
   it("needs 3 earlier sessions with a load", () => {
