@@ -1,9 +1,9 @@
 # Fitness tracking
 
-A personal training and recovery dashboard for one person's Garmin data, built to run for £0.
+A personal training and recovery app for Garmin data, built to run for £0: dashboards, trends, grounded insights and chat, training plans, nutrition and a year in review.
 
 - **App:** Next.js on Vercel (Hobby)
-- **Data, login, secrets, scheduling:** Supabase (Free, London)
+- **Data, login, secrets, scheduling:** Supabase (Free, Frankfurt)
 - **Data source:** Garmin Personal API key, pasted into the app's Settings page
 
 The full design is in [`docs/PLAN.md`](docs/PLAN.md).
@@ -14,6 +14,9 @@ The full design is in [`docs/PLAN.md`](docs/PLAN.md).
 apps/web/         Next.js app (pages, API routes, auth proxy)
 packages/core/    units, time and metric registry
 packages/db/      Drizzle schema with row-level security
+packages/garmin/  Garmin Personal API client, mappers and FIT decoding
+packages/metrics/ derived metrics and rules (pure, with golden tests)
+packages/advice/  insight templates, validators and AI rewording
 supabase/         Supabase CLI config and SQL migrations
 ```
 

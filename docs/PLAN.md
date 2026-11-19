@@ -1,6 +1,6 @@
 # Personal Fitness Tracker — Plan
 
-> Status: Phases 0 and 1 done; Phase 2 mostly done; chat from Phase 3 built (see Progress below). Rewritten 16 Nov 2026 for a £0 build with open sign-up.
+> Status: Phases 0–3 built (see Progress below); Phase 4 is open-ended. Rewritten 16 Nov 2026 for a £0 build with open sign-up.
 > It replaces the earlier family / Garmin Starter / Oracle Cloud plan, which was never committed.
 
 ## Context
@@ -249,7 +249,7 @@ DOIs are checked when each formula is implemented.
 - **Secrets:** Garmin key and token in Supabase Vault; service-role key and `CRON_SECRET` only in Vercel server environment variables; nothing secret in the client bundle (checked in CI by scanning the build output).
 - **Database:** RLS enabled on every table; the anon key can't read anything without my session. `raw_ingest` kept 30 days.
 - **Transport:** HTTPS everywhere (Vercel, Supabase, Garmin).
-- **Processors:** Vercel (hosting; health data passes through its functions), Supabase (Frankfurt), Google Gemini API (only while a user's AI switch is on; UK/EEA data terms: not used for training, logged briefly for abuse detection).
+- **Processors:** Vercel (hosting; health data passes through its functions), Supabase (Frankfurt), Google Gemini API (only while a user's AI switch is on; UK/EEA data terms: not used for training, logged briefly for abuse detection). Not processors of health data, but they see a little: Open Food Facts (search words and barcodes, sent from our server), the browser's push service (encrypted notification payloads), OpenFreeMap and AWS Terrain Tiles (which map area is shown).
 - **Data rights for every user:** export everything as a zip of JSON/CSV; delete Garmin data; **delete account** (removes the auth user, which cascades to all their rows and Vault secrets).
 - **UK GDPR:** other people's health data (special category) is stored, so the household exemption no longer applies. Needed: a short **privacy notice** shown at sign-up (what's stored, where, processors, retention, how to delete), explicit consent at sign-up for health-data processing, and a separate switch for AI (on by default, the owner's decision) before data goes to Google Gemini.
 - **Abuse limits:** Supabase Auth rate limits on sign-up/sign-in; per-user caps on stored activity streams so one account can't fill the 500 MB database.
@@ -315,7 +315,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 
 ---
 
-## Progress (17 Nov 2026)
+## Progress (19 Nov 2026)
 
 **Done:**
 - **Phase 0:** monorepo, CI, Supabase (Frankfurt), Vercel (`fra1`), email and password sign-up, optional TOTP, RLS on every table.
@@ -323,30 +323,46 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
   - Garmin key box with Vault storage, plus 5-minute cron sync with backfill and incremental jobs.
   - Mappers for daily summaries, sleep, HRV, activities and VO2 max, with quarantine for responses that fail validation.
   - Activity files decoded: HR, pace and power streams, laps, strength sets, route maps (MapLibre).
-  - Derived metrics (HRV and resting-HR baselines, sleep debt, Edwards TRIMP, fitness/fatigue/form, ACWR, readiness). Training load v2 computes zones from the HR stream when Garmin gives none.
-  - Ten rules, and a template morning insight with validators and an 8-scenario evaluation suite.
-  - Pages: Today, Activities (list and detail), Week, /methods.
+  - Derived metrics (HRV and resting-HR baselines, sleep debt, Edwards TRIMP, fitness/fatigue/form, ACWR, readiness, sleep midpoint variability). Training load v3 also stores each activity's load, so the activity page shows loads worked out from the HR stream.
+  - Eleven rules (incl. `PLAN_VS_READINESS`), and a template morning insight with validators and an evaluation suite.
+  - Pages: Today, Week, Trends, Activities (list and detail), /methods.
+  - Settings: last sync per data type, failed jobs, quarantined and not-yet-readable responses, storage (yours and the whole database).
   - Privacy notice, consent at sign-up, data export, account deletion, 30-day raw retention.
   - Demo data for people without a Garmin watch.
   - RLS tests against a local Supabase stack.
   - Personal API findings recorded in `docs/adr/0001-garmin-personal-api.md`.
 - **Phase 2:**
-  - Optional AI wording via Google Gemini (ADR 0002; was Groq until 17 Nov), on by default and can be switched off, retried once and then falling back to the template; reused while the template is unchanged. Model fallback when busy; checked live with `pnpm test:live` (13/13 on 17 Nov).
-  - Weekly summaries (last complete week and the week so far).
-  - Post-workout summary for the latest session: load against your typical session (median of the previous 28 days), Garmin's training effect, RPE, and a nudge when a hard session falls on a low-recovery day. Shown on Today and the activity page.
-- **Phase 3:** chat with read-only typed tools and the red-flag guard.
+  - Optional AI wording via Google Gemini (ADR 0002), on by default and can be switched off; model fallback; checked live with `pnpm test:live`.
+  - Morning, post-workout (compared with the same sport), evening (from 18:00 local, with a bedtime suggestion) and weekly insights.
+  - Web Push: installable app (manifest, icons, service worker); per-device subscriptions; morning, evening, post-workout and the finished week sent once each, 07:00–22:00 local; choose which on the Account page.
+- **Phase 3:**
+  - Chat with read-only typed tools (now also weight, food diary totals and planned workouts) and the red-flag guard. Verified 19 Nov with `apps/web/test/live/chat-hrv.live.test.ts`: the §13 question was answered with the HRV average, maximum and minimum for the two weeks before the last long run, all matching SQL and all grounded in tool output.
+  - Dashboard builder: templates (running, cycling, strength, sleep and recovery, body, nutrition), up to 12 charts of 30 metrics, daily or weekly, compare with the previous period.
+  - RPE capture on the activity page, with session-RPE load (Foster 2001) shown next to training load.
+  - Training plans in the app: four-week calendar, five templates, workout builder; planned sessions are ticked when a matching activity is recorded.
+  - Nutrition: food diary, Open Food Facts search and barcode lookup (camera scanning where the browser supports it), custom foods, weight log and adaptive energy and macro targets.
+  - 3D route maps (terrain from AWS Terrain Tiles).
+  - Year in review (/recap).
 
 **Deviations from this plan:**
 - Garmin daily data lives in dedicated tables (`daily_summaries`, `hrv_daily`, `vo2max_daily`) rather than the generic `observations` table. That table is kept for future intraday or other-source data.
-- Training load is Edwards zone TRIMP (Garmin zones, else zones from the HR stream), not Banister TRIMP.
-- Sleep regularity (SRI) is listed as missing until sleep epochs are fetched.
+- Training load is Edwards zone TRIMP (Garmin zones, else zones from the HR stream), not Banister TRIMP. Session-RPE load is shown alongside, never added to it (different scale).
+- Sleep regularity (SRI) is still missing until sleep epochs are fetched; sleep midpoint variability is shown on Trends instead and readiness keeps renormalising without regularity.
 - AI wording is on by default (opt-out), the owner's decision of 16 Nov 2026; sign-up text and the privacy notice say so.
+- Dashboards use one y-axis per chart, not overlays on dual axes: metrics on one chart must share a unit, and comparisons use the previous period.
+- Weight comes from the app's own weight log (`body_measurements`, source `manual`): the Personal API account has no weight data to build a Garmin mapper against.
+- Garmin, Security and Account sit under one Settings link.
+- Push needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in Vercel; without them the app hides the switch.
 
-**Next:**
-- Phase 2: evening insight; Web Push (PWA install + push subscription).
-- Small fixes: activity page shows no training load when it comes only from the HR stream (the post-workout summary does); "typical session" compares across all sports; chat sometimes repeats figures from an earlier question; Today showed 0 sessions with HR zones in 30 days on 17 Nov (check whether that is real).
-- Phase 1 gaps: basic Trends page; sync status, errors, quarantine and database size in Settings; weight mapper once data exists.
-- Phase 3: dashboard builder, RPE capture, training plans, nutrition, 3D maps, year-end recap.
+**Still to check by hand (§13):**
+- Phase 1: activity counts match Garmin Connect for the same range; a short recorded walk appears within about 30 minutes; the next morning's insight cites the real sleep, HRV and resting-HR values. (The last recorded activity is from 9 April, so "0 sessions in 30 days" on Today was correct.)
+- Phase 2: with Gemini on, `pnpm test:live` meets the hard-check bar; push arrives on a phone once the VAPID keys are set.
+
+**Next (Phase 4 and small items):**
+- Garmin weight mapper once the account has weight data; Apple Health import; Garmin account export importer; critical speed or power and race predictor; self-hosted map tiles.
+- Sleep epochs for SRI; an observation table for intraday data if needed.
+
+---
 
 ## Sources
 

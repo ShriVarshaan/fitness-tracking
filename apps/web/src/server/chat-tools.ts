@@ -30,6 +30,9 @@ const METRICS = {
   fatigue: { derived: "atl", unit: "load", label: "Fatigue, acute load (our estimate)" },
   form: { derived: "tsb", unit: "load", label: "Form = fitness - fatigue (our estimate)" },
   sleep_debt: { derived: "sleep_debt", unit: "s", label: "7-night sleep debt (our estimate)" },
+  weight: { table: "body_measurements", column: "weight_kg", unit: "kg", label: "Weight (entered by the user)" },
+  energy_eaten: { table: "food_log", column: "kcal", unit: "kcal", label: "Energy eaten, daily total from the food diary", sum: true },
+  protein_eaten: { table: "food_log", column: "protein_g", unit: "g", label: "Protein eaten, daily total from the food diary", sum: true },
 } as const;
 type MetricKey = keyof typeof METRICS;
 const metricEnum = z.enum(Object.keys(METRICS) as [MetricKey, ...MetricKey[]]);
@@ -57,13 +60,14 @@ async function series(supa: Supa, metric: MetricKey, from: string, to: string): 
     return (data ?? []).filter((r) => r.value != null).map((r) => ({ date: r.local_date as string, value: r.value as number }));
   }
   const { data } = await supa.from(m.table).select(`local_date, ${m.column}`).gte("local_date", from).lte("local_date", to).order("local_date");
-  // Several sleep sessions on one date: keep the longest.
+  // Diary entries add up per day; several sleep sessions on one date: keep the longest.
+  const sum = "sum" in m && m.sum;
   const byDate = new Map<string, number>();
   for (const r of (data ?? []) as unknown as Array<Record<string, unknown>>) {
     const v = r[m.column];
     if (typeof v !== "number") continue;
     const d = r.local_date as string;
-    byDate.set(d, Math.max(byDate.get(d) ?? -Infinity, v));
+    byDate.set(d, sum ? (byDate.get(d) ?? 0) + v : Math.max(byDate.get(d) ?? -Infinity, v));
   }
   return [...byDate.entries()].map(([date, value]) => ({ date, value }));
 }
@@ -93,7 +97,7 @@ export function chatTools(supa: Supa) {
       inputSchema: z.object({}),
       execute: async () => {
         const out: Record<string, unknown> = {};
-        for (const table of ["daily_summaries", "sleep_sessions", "hrv_daily", "activities"] as const) {
+        for (const table of ["daily_summaries", "sleep_sessions", "hrv_daily", "activities", "body_measurements", "food_log", "planned_workouts"] as const) {
           const [{ data: first }, { data: last }, { count }] = await Promise.all([
             supa.from(table).select("local_date").order("local_date").limit(1).maybeSingle(),
             supa.from(table).select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle(),
@@ -187,6 +191,30 @@ export function chatTools(supa: Supa) {
           avg_hr_bpm: a.avg_hr,
           garmin_training_load: a.source_training_load ? round(a.source_training_load) : null,
           rpe: a.rpe,
+        }));
+      },
+    }),
+
+    list_planned_workouts: tool({
+      description: "Workouts the user planned in the app's training calendar, in a date range (at most 60 days), with intensity and target time.",
+      inputSchema: z.object({ from: isoDate, to: isoDate }),
+      execute: async ({ from, to }) => {
+        const bad = checkRange(from, to);
+        if (bad) return { error: bad };
+        if ((Date.parse(to) - Date.parse(from)) / 86_400_000 > 60) return { error: "range too long (max 60 days)" };
+        const { data } = await supa
+          .from("planned_workouts")
+          .select("local_date, sport, title, intensity, target_duration_s")
+          .gte("local_date", from)
+          .lte("local_date", to)
+          .order("local_date")
+          .limit(60);
+        return (data ?? []).map((w) => ({
+          date: w.local_date,
+          sport: w.sport,
+          title: w.title,
+          intensity: w.intensity,
+          target: w.target_duration_s ? formatDuration(w.target_duration_s) : null,
         }));
       },
     }),

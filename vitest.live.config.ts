@@ -5,7 +5,10 @@ import { defineConfig } from "vitest/config";
 // not part of `pnpm test`. Needs GOOGLE_GENERATIVE_AI_API_KEY (apps/web/.env.local).
 export default defineConfig({
   resolve: {
-    alias: [{ find: /^@\//, replacement: fileURLToPath(new URL("./apps/web/src/", import.meta.url)) }],
+    alias: [
+      { find: /^@\//, replacement: fileURLToPath(new URL("./apps/web/src/", import.meta.url)) },
+      { find: "server-only", replacement: fileURLToPath(new URL("./test/stubs/server-only.ts", import.meta.url)) },
+    ],
   },
   test: {
     include: ["apps/web/test/live/**/*.live.test.ts"],
