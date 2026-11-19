@@ -29,6 +29,12 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
     source: "Hirshkowitz et al. 2015, Sleep Health 1:40–43; Watson et al. 2015, Sleep 38:843–844.",
   },
   {
+    name: "Sleep timing variability",
+    how: "For each night, the clock time halfway between falling asleep and waking (measured from noon, so 23:00 and 01:00 are two hours apart). The figure shown is the standard deviation of those midpoints over the period: smaller means more regular sleep.",
+    needs: "5 nights with sleep times; full confidence from 14.",
+    source: "Sleep midpoint variability, reported alongside the Sleep Regularity Index by Phillips et al. 2017, Scientific Reports 7:3216.",
+  },
+  {
     name: "Training load (TRIMP)",
     how: "For each activity, minutes in each heart-rate zone multiplied by the zone number (1–5), using the zones set in Garmin. When Garmin gives no zone times, zones are worked out from the activity file's per-second heart rate, as 50–60%, 60–70%, 70–80%, 80–90% and 90–100% of your highest recorded heart rate (99th percentile of any activity). Activities with neither add nothing and are counted as missing.",
     needs: "Activities with heart-rate data.",
