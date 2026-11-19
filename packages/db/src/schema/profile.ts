@@ -18,6 +18,8 @@ export const profile = pgTable(
     aiEnabled: boolean("ai_enabled").notNull().default(true),
     /** When the user last switched AI wording on (null if never changed or off). */
     aiConsentedAt: timestamp("ai_consented_at", { withTimezone: true }),
+    /** Which insights are sent as Web Push notifications (to every subscribed device). */
+    pushKinds: text("push_kinds").array().notNull().default(["morning", "post_workout", "evening", "weekly"]),
     /** Explicit consent to processing health data, against a privacy-notice version. */
     privacyAcceptedAt: timestamp("privacy_accepted_at", { withTimezone: true }),
     privacyVersion: text("privacy_version"),

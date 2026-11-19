@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Personal Garmin training and recovery dashboard.",
   // Private app: keep it out of search engines.
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "Fitness", statusBarStyle: "default" },
+  icons: { apple: "/icons/180.png" },
 };
 
 export const viewport: Viewport = {

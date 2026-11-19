@@ -44,7 +44,9 @@ export default function PrivacyPage() {
         heart rate and sleep duration), with no name or email, are sent to Google&rsquo;s Gemini API to reword the text,
         and if you use chat, your questions and the data looked up to answer them are sent too. Google may process this
         outside the UK and keeps it for a limited time to detect misuse. Health warnings are never sent. You can turn AI
-        off on the Account page at any time, which stops this immediately.
+        off on the Account page at any time, which stops this immediately. If you turn on notifications, each one (a
+        summary&rsquo;s headline) is delivered through your browser&rsquo;s push service (Google, Apple or Mozilla) in
+        encrypted form, so the service can&rsquo;t read it.
       </Section>
 
       <Section title="Who can see it">

@@ -12,6 +12,8 @@ export default defineConfig({
   },
   test: {
     include: ["packages/db/test/**/*.test.ts", "apps/web/test/**/*.test.ts"],
+    // The live model checks spend free quota; they run only with `pnpm test:live`.
+    exclude: ["**/node_modules/**", "**/*.live.test.ts"],
     environment: "node",
     testTimeout: 60_000,
     fileParallelism: false,

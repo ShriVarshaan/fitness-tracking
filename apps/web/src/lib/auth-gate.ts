@@ -15,7 +15,8 @@ export type GateResult =
   | { action: "redirect"; to: "/login" | "/mfa" | "/" }
   | { action: "deny" };
 
-const PUBLIC_PREFIXES = ["/login", "/auth/", "/api/sync/tick", "/privacy"];
+// The manifest, service worker and app icons are fetched without the session, so they stay public.
+const PUBLIC_PREFIXES = ["/login", "/auth/", "/api/sync/tick", "/privacy", "/manifest.webmanifest", "/sw.js", "/icons/"];
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p.endsWith("/") ? p : `${p}/`));

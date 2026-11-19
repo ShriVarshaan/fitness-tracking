@@ -1,4 +1,4 @@
-import { bigserial, boolean, date, index, jsonb, pgTable, primaryKey, real, smallint, text, timestamp } from "drizzle-orm/pg-core";
+import { bigserial, boolean, date, index, jsonb, pgTable, primaryKey, real, smallint, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { ownerReadPolicy, userId } from "./_shared";
 
 /**
@@ -49,6 +49,9 @@ export const insights = pgTable(
     model: text("model").notNull(),
     validatorOk: boolean("validator_ok").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Web Push: what was last notified for this row (the date, or the activity for post-workout), and when. */
+    pushedKey: text("pushed_key"),
+    pushedAt: timestamp("pushed_at", { withTimezone: true }),
   },
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.forDate] }), ownerReadPolicy("insights")],
 ).enableRLS();
@@ -68,4 +71,26 @@ export const chatMessages = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("chat_messages_user_created_idx").on(t.userId, t.createdAt), ownerReadPolicy("chat_messages")],
+).enableRLS();
+
+/**
+ * Web Push subscriptions, one per browser or device. The endpoint belongs to the
+ * browser's push service (Google, Apple, Mozilla); payloads are encrypted end to end.
+ * Written only by server code after checking the session.
+ */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: userId(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    /** Short device description for the settings list, e.g. "Chrome on Android". */
+    device: text("device"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    failures: smallint("failures").notNull().default(0),
+  },
+  (t) => [uniqueIndex("push_subscriptions_endpoint_uq").on(t.endpoint), index("push_subscriptions_user_idx").on(t.userId), ownerReadPolicy("push_subscriptions")],
 ).enableRLS();

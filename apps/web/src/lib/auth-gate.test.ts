@@ -11,12 +11,18 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/auth/callback")).toBe(true);
     expect(isPublicPath("/api/sync/tick")).toBe(true);
     expect(isPublicPath("/privacy")).toBe(true);
+    // Installable app: fetched without the session.
+    expect(isPublicPath("/manifest.webmanifest")).toBe(true);
+    expect(isPublicPath("/sw.js")).toBe(true);
+    expect(isPublicPath("/icons/192.png")).toBe(true);
   });
 
   it("does not match look-alike paths", () => {
     expect(isPublicPath("/loginx")).toBe(false);
     expect(isPublicPath("/api/sync/tickle")).toBe(false);
     expect(isPublicPath("/")).toBe(false);
+    expect(isPublicPath("/sw.jsx")).toBe(false);
+    expect(isPublicPath("/iconsx")).toBe(false);
   });
 });
 

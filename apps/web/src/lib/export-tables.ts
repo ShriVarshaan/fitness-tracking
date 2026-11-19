@@ -16,6 +16,7 @@ export const EXPORT_TABLES = [
   "findings",
   "insights",
   "chat_messages",
+  "push_subscriptions",
   "sync_jobs",
   "raw_ingest",
 ] as const;

@@ -113,6 +113,13 @@
       "when": 1794865864119,
       "tag": "20261116215104_chat_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795126515641,
+      "tag": "20261119221515_web_push",
+      "breakpoints": true
     }
   ]
 }

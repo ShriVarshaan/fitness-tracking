@@ -4,6 +4,7 @@ import { addDays, daysBetween, localNow } from "@ft/core";
 import { schema, type Db } from "@ft/db";
 import { sportName } from "@/lib/activity";
 import { aiGenerate } from "./ai";
+import { notifyInsight } from "./push";
 import {
   ALGO_VERSION,
   activityTrimp,
@@ -323,7 +324,7 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
     restingHrToday: has(inputs.rhr),
     baselineReason: hrvToday?.value === null ? String(hrvToday.components.reason ?? "") || null : null,
   });
-  await storeInsight(db, userId, template);
+  await storeInsight(db, userId, template, { morningReady: has(inputs.sleep) });
   const post = postWorkout(inputs, latest, perDay);
   if (post) await storeInsight(db, userId, post);
   for (const weekly of weeklyInsights(inputs, rows, latest)) await storeInsight(db, userId, weekly);
@@ -339,8 +340,8 @@ async function storeFindingsAndInsight(db: Db, userId: string, inputs: Inputs, r
   }
 }
 
-/** Optionally reword, validate and upsert one insight (keyed by user, kind and date). */
-async function storeInsight(db: Db, userId: string, template: Insight): Promise<void> {
+/** Optionally reword, validate and upsert one insight (keyed by user, kind and date), then maybe send it as a notification. */
+async function storeInsight(db: Db, userId: string, template: Insight, push: { morningReady: boolean } = { morningReady: false }): Promise<void> {
   const { insight, rewordKey: key, fallback } = await maybeReword(db, userId, template);
   const check = validateInsight(insight);
   await db
@@ -358,6 +359,12 @@ async function storeInsight(db: Db, userId: string, template: Insight): Promise<
       target: [insights.userId, insights.kind, insights.forDate],
       set: { body: sql`excluded.body`, ruleIds: sql`excluded.rule_ids`, model: sql`excluded.model`, validatorOk: sql`excluded.validator_ok`, createdAt: sql`now()` },
     });
+  try {
+    await notifyInsight(db, userId, insight, check.ok, push);
+  } catch (err) {
+    // A notification problem must never stop the sync.
+    console.warn("push failed:", err instanceof Error ? err.message.slice(0, 200) : "error");
+  }
 }
 
 /**

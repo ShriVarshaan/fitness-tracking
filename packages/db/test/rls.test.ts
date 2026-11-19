@@ -40,6 +40,8 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
   findings: (u) =>
     sql`insert into findings (user_id, local_date, rule_id, rule_version, severity, confidence, evidence) values (${u}, '2026-01-01', 'R', 1, 'info', 1, '[]'::jsonb)`,
   chat_messages: (u) => sql`insert into chat_messages (user_id, role, content) values (${u}, 'user', 'hello')`,
+  push_subscriptions: (u) =>
+    sql`insert into push_subscriptions (user_id, endpoint, p256dh, auth) values (${u}, ${`https://push.example.test/${u}`}, 'p256dh-key', 'auth-key')`,
   insights: (u) =>
     sql`insert into insights (user_id, kind, for_date, body, rule_ids, model, validator_ok) values (${u}, 'morning', '2026-01-01', '{}'::jsonb, '{}', 'template', true)`,
 };
@@ -61,6 +63,7 @@ const SERVER_WRITE_ONLY = [
   "findings",
   "insights",
   "chat_messages",
+  "push_subscriptions",
 ];
 
 /** Run `fn` as a PostgREST role inside a transaction that is always rolled back. */

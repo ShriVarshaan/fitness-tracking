@@ -3,16 +3,28 @@ import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
 import { createClient } from "@/lib/supabase/server";
 import { aiAvailable } from "@/server/ai";
+import { schema } from "@ft/db";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/server/db";
+import { requireUserId } from "@/server/session";
 import { AiWordingForm, DeleteAccountForm, SleepNeedForm } from "./forms";
+import { removePushDevice } from "./push-actions";
+import { PushSettings } from "./push-settings";
 
 export const metadata: Metadata = { title: "Account" };
 export const maxDuration = 60;
 
 export default async function AccountPage() {
   const supabase = await createClient();
-  const [{ data: auth }, { data: profile }] = await Promise.all([
+  const userId = await requireUserId();
+  const [{ data: auth }, { data: profile }, devices] = await Promise.all([
     supabase.auth.getClaims(),
-    supabase.from("profile").select("sleep_need_min, privacy_accepted_at, privacy_version, ai_enabled, ai_consented_at").maybeSingle(),
+    supabase.from("profile").select("sleep_need_min, privacy_accepted_at, privacy_version, ai_enabled, ai_consented_at, push_kinds").maybeSingle(),
+    // Only the label and date; the endpoint and keys never leave the server.
+    getDb()
+      .select({ id: schema.pushSubscriptions.id, device: schema.pushSubscriptions.device, createdAt: schema.pushSubscriptions.createdAt })
+      .from(schema.pushSubscriptions)
+      .where(eq(schema.pushSubscriptions.userId, userId)),
   ]);
   // Opt-out: no profile row yet means the default, which is on.
   const aiOn = profile ? Boolean(profile.ai_enabled) : true;
@@ -30,6 +42,39 @@ export default async function AccountPage() {
         <h2 className="font-medium">Sleep need</h2>
         <p className="text-sm text-muted">Used for sleep debt and the sleep part of readiness. Most adults need 7–9 hours.</p>
         <SleepNeedForm current={profile?.sleep_need_min ?? 480} />
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
+        <h2 className="font-medium">Notifications</h2>
+        <p className="text-sm text-muted">
+          Get your morning summary, evening check-in, workout and weekly summaries as notifications. Each shows the
+          summary&rsquo;s headline, which may be visible on your lock screen. They&rsquo;re sent between 07:00 and 22:00, and are
+          encrypted so the browser&rsquo;s push service (Google, Apple or Mozilla) can&rsquo;t read them.
+        </p>
+        <PushSettings
+          publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || null}
+          kinds={(profile?.push_kinds as string[] | undefined) ?? ["morning", "post_workout", "evening", "weekly"]}
+        />
+        {devices.length > 0 && (
+          <div className="space-y-1 border-t border-border pt-3">
+            <p className="text-sm font-medium">Devices</p>
+            <ul className="space-y-1">
+              {devices.map((d) => (
+                <li key={d.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span>
+                    {d.device ?? "Browser"} <span className="text-muted">· since {d.createdAt.toLocaleDateString("en-GB")}</span>
+                  </span>
+                  <form action={removePushDevice}>
+                    <input type="hidden" name="id" value={d.id} />
+                    <button type="submit" className="text-sm text-muted underline">
+                      Remove
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <section className="space-y-3 rounded-lg border border-border bg-surface p-5">
