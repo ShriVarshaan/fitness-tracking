@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { addDays } from "@ft/core";
-import { sleepMidpointVariability, WHO_WEEKLY_MIN } from "@ft/metrics";
+import { RACE_DISTANCES, sleepMidpointVariability, WHO_WEEKLY_MIN } from "@ft/metrics";
 import { AppNav } from "@/components/app-nav";
 import { SleepTimingChart, type TimedNight } from "@/components/sleep-timing-chart";
 import { TrendChart } from "@/components/trend-chart";
-import { formatDay, formatDuration } from "@/lib/format";
+import { formatDay, formatDuration, formatNumber, formatRaceTime } from "@/lib/format";
+import { cyclingPerformance, runningPerformance, type CyclingPerformance, type RunningPerformance } from "@/server/performance";
 import { createClient } from "@/lib/supabase/server";
 import { align, clockFromNoon, component, dateAxis, parseRange, RANGES, weeklyIntensity, type RangeKey } from "@/lib/trends";
 
@@ -50,7 +51,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
       .lte("local_date", latestDate)
       .then(({ data }) => (data ?? []) as DerivedRow[]);
 
-  const [ctl, atl, tsb, acwr, hrvBase, rhrBase, { data: days }, { data: hrv }, { data: sleep }, { data: vo2 }, { data: prof }, { data: weight }] =
+  const [ctl, atl, tsb, acwr, hrvBase, rhrBase, { data: days }, { data: hrv }, { data: sleep }, { data: vo2 }, { data: prof }, { data: weight }, running, cycling] =
     await Promise.all([
       derived("ctl"),
       derived("atl"),
@@ -72,7 +73,9 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         .order("end_time", { ascending: true }),
       supabase.from("vo2max_daily").select("local_date, sport, value").gte("local_date", from).lte("local_date", latestDate),
       supabase.from("profile").select("sleep_need_min").maybeSingle(),
-      supabase.from("body_measurements").select("local_date, weight_kg").gte("local_date", from).lte("local_date", latestDate).order("local_date"),
+      supabase.from("body_measurements").select("local_date, weight_kg, source").gte("local_date", from).lte("local_date", latestDate).order("local_date"),
+      runningPerformance(supabase),
+      cyclingPerformance(supabase),
     ]);
 
   const last = <T,>(rows: T[]) => rows.at(-1);
@@ -237,6 +240,16 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         )}
       </Section>
 
+      {(running || cycling) && (
+        <Section
+          title="Performance"
+          intro="From the per-second data in your activity files: your fastest stretches inside any run or ride, not only races. Training efforts are rarely all-out, so these estimates usually err on the slow side."
+        >
+          {running && <RunningPanel p={running} />}
+          {cycling && <CyclingPanel p={cycling} />}
+        </Section>
+      )}
+
       <p className="text-xs text-muted">
         Latest data {formatDay(latestDate)}. How the estimates are calculated:{" "}
         <Link href="/methods" className="underline">
@@ -246,6 +259,123 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
       </p>
     </Shell>
   );
+}
+
+function RunningPanel({ p }: { p: RunningPerformance }) {
+  const cs = p.criticalSpeed;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium">Running</h3>
+        <span className="text-xs text-muted">
+          {p.activities} {p.activities === 1 ? "run" : "runs"} with distance data, {formatDay(p.from)} – {formatDay(p.to)}
+        </span>
+      </div>
+      {p.bests.length ? (
+        <table className="w-full text-sm">
+          <caption className="sr-only">Best efforts and predicted race times</caption>
+          <thead className="text-left text-xs text-muted">
+            <tr>
+              <th className="py-1 font-normal">Distance</th>
+              <th className="py-1 font-normal">Best effort</th>
+              <th className="py-1 font-normal">Predicted race time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {RACE_DISTANCES.map((r) => {
+              const best = p.bests.find((b) => Math.abs(b.key - r.m) < 1);
+              const pred = p.predictions.find((x) => x.key === r.key)?.result;
+              if (!best && !pred) return null;
+              return (
+                <tr key={r.key} className="border-t border-border">
+                  <td className="py-1.5">{r.label}</td>
+                  <td className="py-1.5 tabular-nums">
+                    {best ? (
+                      <Link href={`/activities/${best.activityId}`} className="underline decoration-border underline-offset-2">
+                        {formatRaceTime(best.value)}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="py-1.5 tabular-nums">
+                    {pred === undefined ? (
+                      ""
+                    ) : pred.ok ? (
+                      <>
+                        {formatRaceTime(pred.timeS)} <span className="text-xs text-muted">({confidenceWord(pred.confidence)}, from your {distanceLabel(pred.from.key)} best)</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted">Not available: {pred.reason}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-sm text-muted">Not available: no runs with per-second distance in this period.</p>
+      )}
+      <p className="text-sm">
+        <span className="font-medium">Critical speed: </span>
+        {cs.ok ? (
+          <>
+            {formatPace(cs.critical)} ({formatNumber(cs.critical * 3.6, 1)} km/h), with about {formatNumber(cs.reserve, 0)} m in reserve above it ·{" "}
+            <EstimateTag confidence={cs.confidence} />
+          </>
+        ) : (
+          <span className="text-muted">not available: {cs.reason}.</span>
+        )}
+      </p>
+      <p className="text-xs text-muted">
+        Critical speed is roughly the fastest pace you can hold for 30–40 minutes. Predictions use Riegel&rsquo;s formula from
+        your best effort nearest the race distance.
+      </p>
+    </div>
+  );
+}
+
+function CyclingPanel({ p }: { p: CyclingPerformance }) {
+  const cp = p.criticalPower;
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-medium">Cycling</h3>
+        <span className="text-xs text-muted">
+          {p.activities} {p.activities === 1 ? "ride" : "rides"} with power, {formatDay(p.from)} – {formatDay(p.to)}
+        </span>
+      </div>
+      <p className="text-sm tabular-nums">
+        Best power:{" "}
+        {p.bests.map((b, i) => (
+          <span key={b.key}>
+            {i > 0 && " · "}
+            {b.key / 60} min {formatNumber(b.value)} W
+          </span>
+        ))}
+      </p>
+      <p className="text-sm">
+        <span className="font-medium">Critical power: </span>
+        {cp.ok ? (
+          <>
+            {formatNumber(cp.critical)} W, with about {formatNumber(cp.reserve / 1000, 1)} kJ above it ·{" "}
+            <EstimateTag confidence={cp.confidence} />
+          </>
+        ) : (
+          <span className="text-muted">not available: {cp.reason}.</span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+const distanceLabel = (m: number) => RACE_DISTANCES.find((r) => Math.abs(r.m - m) < 1)?.label.toLowerCase() ?? `${formatNumber(m / 1000, 1)} km`;
+const confidenceWord = (c: number) => (c >= 0.8 ? "high confidence" : c >= 0.5 ? "medium confidence" : "low confidence");
+
+function formatPace(mps: number): string {
+  const s = Math.round(1000 / mps);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} /km`;
 }
 
 function Shell({ range, children }: { range: RangeKey; children: ReactNode }) {

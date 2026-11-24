@@ -9,3 +9,4 @@ export * from "./weekly";
 export * from "./session";
 export * from "./evening";
 export * from "./nutrition";
+export * from "./performance";

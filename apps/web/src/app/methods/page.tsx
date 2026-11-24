@@ -59,6 +59,24 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
     source: "Mifflin et al. 1990, American Journal of Clinical Nutrition 51:241–247; Thomas, Erdman & Burke 2016, Journal of the Academy of Nutrition and Dietetics 116:501–528 (ranges). The points chosen within those ranges are our own heuristic.",
   },
   {
+    name: "Best efforts",
+    how: "The fastest time for each distance (1 km to marathon) anywhere inside a run, from the per-second distance in the activity file, interpolated between samples. Uses the last 90 days up to your latest run.",
+    needs: "Runs with an activity file (per-second distance).",
+    source: "Measured from your own data; no formula.",
+  },
+  {
+    name: "Critical speed and critical power",
+    how: "Your best average speed (running) or power (cycling) over 3, 5, 10 and 20 minutes in the last 90 days, from per-second data. Total distance (or work) is fitted against time with a straight line: the slope is the critical speed or power, and the intercept is the reserve you can spend above it (D′ or W′). Pauses longer than 10 seconds are squeezed to 10 seconds. If the fit implies no reserve, the efforts weren't all-out and no value is shown. Confidence is the share of the four durations available times fit quality (full at R² ≥ 0.99, 0.75 at ≥ 0.97, otherwise 0.5): our own heuristic.",
+    needs: "Best efforts at 3 of the 4 durations; power data for cycling.",
+    source: "Monod & Scherrer 1965, Ergonomics 8:329–338; Jones et al. 2010, Medicine & Science in Sports & Exercise 42:1876–1890.",
+  },
+  {
+    name: "Race predictor",
+    how: "Riegel's formula: time₂ = time₁ × (distance₂ / distance₁)^1.06, from your best effort of at least 3 km nearest the race distance. It never stretches more than 5 times the distance either way. Confidence falls as the gap grows: 1 for the same distance, about 0.6 for double (1 / (1 + |ln ratio|), our heuristic). Training efforts are rarely all-out, so predictions usually err on the slow side.",
+    needs: "A best effort of 3 km or more within 5 times the race distance.",
+    source: "Riegel 1981, American Scientist 69:285–290.",
+  },
+  {
     name: "Fitness, fatigue and form",
     how: "Fitness is an exponentially weighted average of daily load over about 42 days, fatigue over about 7 days. Form is yesterday's fitness minus yesterday's fatigue.",
     needs: "Full confidence after 42 days of history.",

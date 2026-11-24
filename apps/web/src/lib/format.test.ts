@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDay, formatDuration, formatKm, formatNumber, mean, titleCase } from "./format";
+import { formatDay, formatDuration, formatKm, formatNumber, formatRaceTime, mean, titleCase } from "./format";
 
 describe("format helpers", () => {
   it("formats durations", () => {
@@ -7,6 +7,13 @@ describe("format helpers", () => {
     expect(formatDuration(27_030)).toBe("7h 31m");
     expect(formatDuration(540)).toBe("9m");
     expect(formatDuration(null)).toBe("—");
+  });
+
+  it("formats race times", () => {
+    expect(formatRaceTime(1198)).toBe("19:58");
+    expect(formatRaceTime(5525)).toBe("1:32:05");
+    expect(formatRaceTime(65)).toBe("1:05");
+    expect(formatRaceTime(null)).toBe("—");
   });
 
   it("formats numbers and distance", () => {
