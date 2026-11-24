@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isEmptyPayload,
+  mapWeight,
   mapActivities,
   mapDailySummaries,
   mapHrv,
@@ -268,5 +269,46 @@ describe("isEmptyPayload", () => {
     expect(isEmptyPayload(null)).toBe(true);
     expect(isEmptyPayload({ dailyWeightSummaries: [], totalAverage: {} })).toBe(true);
     expect(isEmptyPayload([{ x: 1 }])).toBe(false);
+  });
+});
+
+describe("mapWeight", () => {
+  const entry = (ts: number, grams: number, bodyFat: number | null = null) => ({
+    samplePk: ts,
+    calendarDate: "2026-11-20",
+    timestampGMT: ts,
+    date: ts,
+    weight: grams,
+    bodyFat,
+    sourceType: "INDEX_SCALE",
+  });
+
+  it("keeps the day's latest weigh-in, in kg", () => {
+    const rows = mapWeight({
+      dailyWeightSummaries: [
+        { summaryDate: "2026-11-20", allWeightMetrics: [entry(2000, 80_350, 18.4), entry(1000, 81_000)], latestWeight: entry(2000, 80_350, 18.4) },
+        { summaryDate: "2026-11-21", allWeightMetrics: [], latestWeight: null },
+      ],
+      totalAverage: {},
+    });
+    expect(rows).toEqual([{ localDate: "2026-11-20", weightKg: 80.35, bodyFatPct: 18.4 }]);
+  });
+
+  it("drops implausible body fat but keeps the weight", () => {
+    const rows = mapWeight({ dailyWeightSummaries: [{ summaryDate: "2026-11-20", latestWeight: entry(1, 70_000, 0) }] });
+    expect(rows).toEqual([{ localDate: "2026-11-20", weightKg: 70, bodyFatPct: null }]);
+  });
+
+  it("throws on values that are not grams, so the payload is quarantined", () => {
+    expect(() => mapWeight({ dailyWeightSummaries: [{ summaryDate: "2026-11-20", latestWeight: entry(1, 80.3) }] })).toThrow(/plausible/);
+  });
+
+  it("throws on an unexpected outer shape", () => {
+    expect(() => mapWeight({ dateWeightList: [] })).toThrow();
+  });
+
+  it("maps an empty range to no rows", () => {
+    expect(mapWeight({ dailyWeightSummaries: [], totalAverage: {} })).toEqual([]);
+    expect(mapWeight(null)).toEqual([]);
   });
 });

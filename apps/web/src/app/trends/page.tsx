@@ -7,6 +7,7 @@ import { AppNav } from "@/components/app-nav";
 import { SleepTimingChart, type TimedNight } from "@/components/sleep-timing-chart";
 import { TrendChart } from "@/components/trend-chart";
 import { formatDay, formatDuration, formatNumber, formatRaceTime } from "@/lib/format";
+import { onePerDay, weightBadge } from "@/lib/weight";
 import { cyclingPerformance, runningPerformance, type CyclingPerformance, type RunningPerformance } from "@/server/performance";
 import { createClient } from "@/lib/supabase/server";
 import { align, clockFromNoon, component, dateAxis, parseRange, RANGES, weeklyIntensity, type RangeKey } from "@/lib/trends";
@@ -87,7 +88,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
   const intensity = weeklyIntensity(axis, days ?? []);
   const vo2Rows = (vo2 ?? []) as Array<{ local_date: string; sport: string; value: number }>;
   const vo2Run = align(axis, vo2Rows.filter((r) => r.sport === "running"), (r) => r.value);
-  const weightRows = (weight ?? []) as Array<{ local_date: string; weight_kg: number | null }>;
+  const weightRows = onePerDay((weight ?? []) as Array<{ local_date: string; weight_kg: number | null; source: string }>);
   const vo2Bike = align(axis, vo2Rows.filter((r) => r.sport === "cycling"), (r) => r.value);
 
   return (
@@ -220,7 +221,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         {weightRows.length ? (
           <TrendChart
             title="Weight"
-            badge="You entered"
+            badge={weightBadge(weightRows)}
             labels={axis}
             unit="kg"
             digits={1}

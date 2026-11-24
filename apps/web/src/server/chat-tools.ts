@@ -2,6 +2,7 @@ import "server-only";
 import { tool } from "ai";
 import { z } from "zod";
 import { formatDuration } from "@/lib/format";
+import { onePerDay } from "@/lib/weight";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -30,7 +31,7 @@ const METRICS = {
   fatigue: { derived: "atl", unit: "load", label: "Fatigue, acute load (our estimate)" },
   form: { derived: "tsb", unit: "load", label: "Form = fitness - fatigue (our estimate)" },
   sleep_debt: { derived: "sleep_debt", unit: "s", label: "7-night sleep debt (our estimate)" },
-  weight: { table: "body_measurements", column: "weight_kg", unit: "kg", label: "Weight (entered by the user)" },
+  weight: { table: "body_measurements", column: "weight_kg", unit: "kg", label: "Weight (entered by the user, or from a Garmin scale)" },
   energy_eaten: { table: "food_log", column: "kcal", unit: "kcal", label: "Energy eaten, daily total from the food diary", sum: true },
   protein_eaten: { table: "food_log", column: "protein_g", unit: "g", label: "Protein eaten, daily total from the food diary", sum: true },
 } as const;
@@ -59,7 +60,9 @@ async function series(supa: Supa, metric: MetricKey, from: string, to: string): 
       .order("local_date");
     return (data ?? []).filter((r) => r.value != null).map((r) => ({ date: r.local_date as string, value: r.value as number }));
   }
-  const { data } = await supa.from(m.table).select(`local_date, ${m.column}`).gte("local_date", from).lte("local_date", to).order("local_date");
+  const { data: raw } = await supa.from(m.table).select(m.table === "body_measurements" ? `local_date, source, ${m.column}` : `local_date, ${m.column}`).gte("local_date", from).lte("local_date", to).order("local_date");
+  // Weight: one per day, the user's own entry over a Garmin scale reading.
+  const data = m.table === "body_measurements" ? onePerDay((raw ?? []) as unknown as Array<{ local_date: string; source: string }>) : raw;
   // Diary entries add up per day; several sleep sessions on one date: keep the longest.
   const sum = "sum" in m && m.sum;
   const byDate = new Map<string, number>();

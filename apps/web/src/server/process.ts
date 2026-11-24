@@ -1,10 +1,10 @@
 import "server-only";
 import { schema, type Db } from "@ft/db";
-import { isEmptyPayload, mapActivities, mapDailySummaries, mapHrv, mapSleepSummaries, mapVo2max } from "@ft/garmin";
+import { isEmptyPayload, mapActivities, mapDailySummaries, mapHrv, mapSleepSummaries, mapVo2max, mapWeight } from "@ft/garmin";
 import { and, asc, eq, getTableColumns, isNull, sql, type Column, type SQL, type Table } from "drizzle-orm";
 import { ZodError } from "zod";
 
-const { rawIngest, dailySummaries, sleepSessions, hrvDaily, activities, vo2maxDaily } = schema;
+const { rawIngest, dailySummaries, sleepSessions, hrvDaily, activities, vo2maxDaily, bodyMeasurements } = schema;
 
 type RawRow = typeof rawIngest.$inferSelect;
 
@@ -88,8 +88,21 @@ async function mapRow(db: Db, row: RawRow): Promise<void> {
         });
       return;
     }
+    case "weight_range": {
+      const rows = mapWeight(row.payload);
+      if (rows.length === 0) return;
+      // Stored beside weights entered in the app (source "manual"); readers prefer the manual one on the same day.
+      await db
+        .insert(bodyMeasurements)
+        .values(rows.map((r) => ({ userId: row.userId, source: "garmin", ...r, updatedAt: new Date() })))
+        .onConflictDoUpdate({
+          target: [bodyMeasurements.userId, bodyMeasurements.localDate, bodyMeasurements.source],
+          set: excludedSet(bodyMeasurements, ["weightKg", "bodyFatPct", "updatedAt"]),
+        });
+      return;
+    }
     default:
-      // No mapper yet (weight): empty responses are simply done;
+      // No mapper for this endpoint: empty responses are simply done;
       // anything with data is kept raw and flagged so a mapper can be written for it.
       if (!isEmptyPayload(row.payload)) throw new UnmappedError(row.endpoint);
   }
@@ -133,6 +146,10 @@ export async function processPending(db: Db, opts: { userId?: string; budgetMs: 
   const started = Date.now();
   const result: ProcessResult = { processed: 0, quarantined: 0, touchedUsers: [] };
   const touched = new Set<string>();
+  // Responses kept as "no mapper yet" become processable once a mapper exists (weight, Nov 2026).
+  await db.execute(
+    sql`update raw_ingest set error = null where processed_at is null and error like 'unmapped:%' and endpoint in ('weight_range')`,
+  );
   const rows = await db
     .select()
     .from(rawIngest)

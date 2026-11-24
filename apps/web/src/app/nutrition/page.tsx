@@ -6,6 +6,7 @@ import { nutritionTargets, type NutritionGoal } from "@ft/metrics";
 import { AppNav } from "@/components/app-nav";
 import { formatDay, formatNumber } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { onePerDay } from "@/lib/weight";
 import { deleteFood, deleteLogEntry, deleteWeight } from "./actions";
 import { AddFood } from "./add-food";
 import { ProfileForm, WeightForm } from "./forms";
@@ -18,6 +19,13 @@ const MEALS = [
   ["dinner", "Dinner"],
   ["snack", "Snacks"],
 ] as const;
+
+interface WeightRow {
+  local_date: string;
+  weight_kg: number;
+  body_fat_pct: number | null;
+  source: string;
+}
 
 interface LogRow {
   id: number;
@@ -40,9 +48,9 @@ export default async function NutritionPage(props: PageProps<"/nutrition">) {
   const date = asked > today ? today : asked;
   const weekAgo = addDays(date, -7);
 
-  const [{ data: log }, { data: weights }, { data: days }, { data: acts }, { data: foods }] = await Promise.all([
+  const [{ data: log }, { data: weightData }, { data: days }, { data: acts }, { data: foods }] = await Promise.all([
     supabase.from("food_log").select("id, meal, name, grams, kcal, protein_g, carbs_g, fat_g").eq("local_date", date).order("created_at"),
-    supabase.from("body_measurements").select("local_date, weight_kg, body_fat_pct").lte("local_date", date).order("local_date", { ascending: false }).limit(8),
+    supabase.from("body_measurements").select("local_date, weight_kg, body_fat_pct, source").lte("local_date", date).order("local_date", { ascending: false }).limit(16),
     // Garmin's measured expenditure for the 7 complete days before this one.
     supabase.from("daily_summaries").select("local_date, total_kcal").gte("local_date", weekAgo).lt("local_date", date),
     supabase.from("activities").select("duration_s").gte("local_date", addDays(date, -6)).lte("local_date", date),
@@ -50,7 +58,8 @@ export default async function NutritionPage(props: PageProps<"/nutrition">) {
   ]);
 
   const entries = (log ?? []) as LogRow[];
-  const latestWeight = (weights ?? [])[0] as { local_date: string; weight_kg: number } | undefined;
+  const weights = onePerDay((weightData ?? []) as WeightRow[]).slice(0, 8);
+  const latestWeight = weights[0];
   // A weight older than 60 days is too stale to base targets on.
   const weightKg = latestWeight && addDays(latestWeight.local_date, 60) >= date ? latestWeight.weight_kg : null;
   const birthYear = (prof?.birth_year as number | null | undefined) ?? null;
@@ -157,20 +166,24 @@ export default async function NutritionPage(props: PageProps<"/nutrition">) {
       </Card>
 
       <Card title="Weight">
-        {weights?.length ? (
+        {weights.length ? (
           <ul className="space-y-1 text-sm">
-            {(weights as Array<{ local_date: string; weight_kg: number; body_fat_pct: number | null }>).map((w) => (
+            {weights.map((w) => (
               <li key={w.local_date} className="flex items-center justify-between gap-3">
                 <span>
                   {formatDay(w.local_date)} · <strong className="font-semibold tabular-nums">{formatNumber(w.weight_kg, 1)} kg</strong>
                   {w.body_fat_pct != null && <span className="text-muted"> · {formatNumber(w.body_fat_pct, 1)}% body fat</span>}
                 </span>
-                <form action={deleteWeight}>
-                  <input type="hidden" name="date" value={w.local_date} />
-                  <button type="submit" className="text-xs text-muted underline">
-                    Remove
-                  </button>
-                </form>
+                {w.source === "manual" ? (
+                  <form action={deleteWeight}>
+                    <input type="hidden" name="date" value={w.local_date} />
+                    <button type="submit" className="text-xs text-muted underline">
+                      Remove
+                    </button>
+                  </form>
+                ) : (
+                  <span className="text-xs text-muted">Garmin</span>
+                )}
               </li>
             ))}
           </ul>

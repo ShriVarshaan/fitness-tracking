@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { onePerDay } from "@/lib/weight";
 
 type Series = Map<string, Map<string, number>>;
 
@@ -105,8 +106,8 @@ export async function loadMetricSeries(supabase: SupabaseClient, codes: Readonly
   if (codes.has("weight") || codes.has("body_fat")) {
     jobs.push(
       (async () => {
-        const { data } = await supabase.from("body_measurements").select("local_date, weight_kg, body_fat_pct").gte("local_date", from).lte("local_date", to).limit(1000);
-        for (const r of data ?? []) {
+        const { data } = await supabase.from("body_measurements").select("local_date, weight_kg, body_fat_pct, source").gte("local_date", from).lte("local_date", to).limit(1000);
+        for (const r of onePerDay((data ?? []) as Array<{ local_date: string; weight_kg: number; body_fat_pct: number | null; source: string }>)) {
           if (codes.has("weight")) put("weight", r.local_date as string, r.weight_kg as number);
           if (codes.has("body_fat")) put("body_fat", r.local_date as string, r.body_fat_pct as number | null);
         }

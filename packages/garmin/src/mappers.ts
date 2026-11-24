@@ -419,6 +419,67 @@ export function mapVo2max(payload: unknown): Vo2maxRow[] {
   return rows;
 }
 
+// ---------------------------------------------------------------------------------
+// Weight: GET /weight-service/weight/range/{start}/{end}?includeAll=true
+//   → { dailyWeightSummaries: [{ summaryDate, latestWeight, allWeightMetrics: [...] }] }
+// The empty form of this response was observed; entries with data were not (the
+// account had none), so this follows Garmin Connect's documented web shape:
+// weight, bone and muscle mass in grams, body fat and water in percent. Values
+// outside a plausible range throw, so a payload in other units is quarantined
+// rather than stored wrong.
+// ---------------------------------------------------------------------------------
+
+const weightEntry = z.object({
+  samplePk: z.union([z.number(), z.string()]).nullish(),
+  calendarDate: z.iso.date().nullish(),
+  timestampGMT: num,
+  date: num,
+  weight: num,
+  bodyFat: num,
+  sourceType: str,
+});
+
+const weightDay = z.object({
+  summaryDate: z.iso.date(),
+  latestWeight: weightEntry.nullish(),
+  allWeightMetrics: z.array(weightEntry).nullish(),
+});
+
+export const weightResponse = z.object({ dailyWeightSummaries: z.array(weightDay) });
+
+export interface WeightRow {
+  localDate: string;
+  weightKg: number;
+  bodyFatPct: number | null;
+}
+
+/** Same bounds as the body_measurements check constraint. */
+export const WEIGHT_KG_RANGE = [20, 400] as const;
+const BODY_FAT_RANGE = [2, 75] as const;
+
+/** One row per day: the day's latest weigh-in. */
+export function mapWeight(payload: unknown): WeightRow[] {
+  if (payload === null) return [];
+  const rows: WeightRow[] = [];
+  for (const day of weightResponse.parse(payload).dailyWeightSummaries) {
+    const entries = [...(day.allWeightMetrics ?? []), ...(day.latestWeight ? [day.latestWeight] : [])].filter((e) => reading(e.weight) !== null);
+    if (!entries.length) continue;
+    // Latest by timestamp; latestWeight wins ties (it is listed last).
+    const latest = entries.reduce((a, b) => ((b.timestampGMT ?? b.date ?? 0) >= (a.timestampGMT ?? a.date ?? 0) ? b : a));
+    const kg = latest.weight! / 1000;
+    if (kg < WEIGHT_KG_RANGE[0] || kg > WEIGHT_KG_RANGE[1]) {
+      throw new Error(`weight ${day.summaryDate}: ${latest.weight} is not a plausible weight in grams`);
+    }
+    const fat = reading(latest.bodyFat);
+    rows.push({
+      localDate: day.summaryDate,
+      weightKg: Math.round(kg * 100) / 100,
+      bodyFatPct: fat !== null && fat >= BODY_FAT_RANGE[0] && fat <= BODY_FAT_RANGE[1] ? fat : null,
+    });
+  }
+  return rows;
+}
+
 /** True for the "nothing here" responses Garmin returns for empty ranges. */
 export function isEmptyPayload(payload: unknown): boolean {
   if (payload === null || payload === undefined) return true;

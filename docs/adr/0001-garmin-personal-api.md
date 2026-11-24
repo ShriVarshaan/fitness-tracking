@@ -37,4 +37,4 @@ Garmin publishes token instructions and an FAQ for the Personal API, but no endp
 ## Consequences
 
 - Mappers (`packages/garmin/src/mappers.ts`) are written against the observed shapes and are tolerant. A response that fails validation is quarantined: kept raw with an error set, not dropped.
-- Weight has no mapper yet, because the account has no weight data to check a mapper against. Responses that contain data are flagged as unmapped instead of guessed at.
+- Weight (Nov 2026): the account still has no weight data, so the mapper follows Garmin Connect's web shape (`dailyWeightSummaries[].allWeightMetrics[]`, weight in grams). A weight outside 20–400 kg after conversion quarantines the response instead of storing it wrong. Garmin weights are stored in `body_measurements` with source `garmin`; on a day with both, the weight entered in the app wins.
