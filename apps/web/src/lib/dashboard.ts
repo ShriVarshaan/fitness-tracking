@@ -7,7 +7,8 @@ import { weekStart } from "@ft/metrics";
 import { z } from "zod";
 
 export type Agg = "sum" | "avg" | "last";
-export type Badge = "Garmin" | "Estimate" | "You entered";
+/** "Measured" values come from Garmin or Apple Health; "Garmin" ones only from Garmin. */
+export type Badge = "Garmin" | "Measured" | "Estimate" | "You entered";
 
 export interface ChartMetric {
   code: string;
@@ -22,30 +23,30 @@ export interface ChartMetric {
 }
 
 export const CHART_METRICS: ChartMetric[] = [
-  { code: "steps", label: "Steps", unit: "steps", digits: 0, weekly: "sum", badge: "Garmin", group: "Activity" },
-  { code: "distance_km", label: "Distance (all day)", unit: "km", digits: 1, weekly: "sum", badge: "Garmin", group: "Activity" },
+  { code: "steps", label: "Steps", unit: "steps", digits: 0, weekly: "sum", badge: "Measured", group: "Activity" },
+  { code: "distance_km", label: "Distance (all day)", unit: "km", digits: 1, weekly: "sum", badge: "Measured", group: "Activity" },
   { code: "intensity_min", label: "Intensity minutes (vigorous ×2)", unit: "min", digits: 0, weekly: "sum", badge: "Garmin", group: "Activity" },
-  { code: "training_min", label: "Training time", unit: "min", digits: 0, weekly: "sum", badge: "Garmin", group: "Activity" },
-  { code: "run_km", label: "Running distance", unit: "km", digits: 1, weekly: "sum", badge: "Garmin", group: "Activity" },
-  { code: "ride_km", label: "Cycling distance", unit: "km", digits: 1, weekly: "sum", badge: "Garmin", group: "Activity" },
-  { code: "strength_min", label: "Strength training time", unit: "min", digits: 0, weekly: "sum", badge: "Garmin", group: "Activity" },
-  { code: "active_kcal", label: "Active energy", unit: "kcal", digits: 0, weekly: "avg", badge: "Garmin", group: "Activity" },
-  { code: "total_kcal", label: "Total energy use", unit: "kcal", digits: 0, weekly: "avg", badge: "Garmin", group: "Activity" },
-  { code: "resting_hr", label: "Resting heart rate", unit: "bpm", digits: 0, weekly: "avg", badge: "Garmin", group: "Recovery" },
+  { code: "training_min", label: "Training time", unit: "min", digits: 0, weekly: "sum", badge: "Measured", group: "Activity" },
+  { code: "run_km", label: "Running distance", unit: "km", digits: 1, weekly: "sum", badge: "Measured", group: "Activity" },
+  { code: "ride_km", label: "Cycling distance", unit: "km", digits: 1, weekly: "sum", badge: "Measured", group: "Activity" },
+  { code: "strength_min", label: "Strength training time", unit: "min", digits: 0, weekly: "sum", badge: "Measured", group: "Activity" },
+  { code: "active_kcal", label: "Active energy", unit: "kcal", digits: 0, weekly: "avg", badge: "Measured", group: "Activity" },
+  { code: "total_kcal", label: "Total energy use", unit: "kcal", digits: 0, weekly: "avg", badge: "Measured", group: "Activity" },
+  { code: "resting_hr", label: "Resting heart rate", unit: "bpm", digits: 0, weekly: "avg", badge: "Measured", group: "Recovery" },
   { code: "hrv", label: "Overnight HRV", unit: "ms", digits: 0, weekly: "avg", badge: "Garmin", group: "Recovery" },
   { code: "stress", label: "Stress (average)", unit: "score", digits: 0, weekly: "avg", badge: "Garmin", group: "Recovery" },
   { code: "body_battery", label: "Body Battery (high)", unit: "score", digits: 0, weekly: "avg", badge: "Garmin", group: "Recovery" },
   { code: "readiness", label: "Readiness", unit: "score", digits: 0, weekly: "avg", badge: "Estimate", group: "Recovery" },
-  { code: "sleep_h", label: "Sleep", unit: "h", digits: 1, weekly: "avg", badge: "Garmin", group: "Sleep" },
-  { code: "deep_h", label: "Deep sleep", unit: "h", digits: 1, weekly: "avg", badge: "Garmin", group: "Sleep" },
-  { code: "rem_h", label: "REM sleep", unit: "h", digits: 1, weekly: "avg", badge: "Garmin", group: "Sleep" },
+  { code: "sleep_h", label: "Sleep", unit: "h", digits: 1, weekly: "avg", badge: "Measured", group: "Sleep" },
+  { code: "deep_h", label: "Deep sleep", unit: "h", digits: 1, weekly: "avg", badge: "Measured", group: "Sleep" },
+  { code: "rem_h", label: "REM sleep", unit: "h", digits: 1, weekly: "avg", badge: "Measured", group: "Sleep" },
   { code: "sleep_debt_h", label: "Sleep debt (7 nights)", unit: "h", digits: 1, weekly: "last", badge: "Estimate", group: "Sleep" },
   { code: "sleep_score", label: "Sleep score", unit: "score", digits: 0, weekly: "avg", badge: "Garmin", group: "Sleep" },
   { code: "load", label: "Training load", unit: "load", digits: 0, weekly: "sum", badge: "Estimate", group: "Training load" },
   { code: "ctl", label: "Fitness (chronic load)", unit: "load", digits: 0, weekly: "last", badge: "Estimate", group: "Training load" },
   { code: "atl", label: "Fatigue (acute load)", unit: "load", digits: 0, weekly: "last", badge: "Estimate", group: "Training load" },
   { code: "tsb", label: "Form", unit: "load", digits: 0, weekly: "last", badge: "Estimate", group: "Training load" },
-  { code: "vo2max", label: "VO2 max (running)", unit: "ml/kg/min", digits: 0, weekly: "last", badge: "Garmin", group: "Body" },
+  { code: "vo2max", label: "VO2 max (running)", unit: "ml/kg/min", digits: 0, weekly: "last", badge: "Measured", group: "Body" },
   { code: "weight", label: "Weight", unit: "kg", digits: 1, weekly: "avg", badge: "You entered", group: "Body" },
   { code: "body_fat", label: "Body fat", unit: "%", digits: 1, weekly: "avg", badge: "You entered", group: "Body" },
   { code: "eaten_kcal", label: "Energy eaten", unit: "kcal", digits: 0, weekly: "avg", badge: "You entered", group: "Nutrition" },

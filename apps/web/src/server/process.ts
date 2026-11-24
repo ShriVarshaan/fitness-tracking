@@ -3,6 +3,7 @@ import { schema, type Db } from "@ft/db";
 import { isEmptyPayload, mapActivities, mapDailySummaries, mapHrv, mapSleepSummaries, mapVo2max, mapWeight } from "@ft/garmin";
 import { and, asc, eq, getTableColumns, isNull, sql, type Column, type SQL, type Table } from "drizzle-orm";
 import { ZodError } from "zod";
+import { supersedeApple, supersedeExportSleep } from "./imports";
 
 const { rawIngest, dailySummaries, sleepSessions, hrvDaily, activities, vo2maxDaily, bodyMeasurements } = schema;
 
@@ -35,6 +36,8 @@ async function mapRow(db: Db, row: RawRow): Promise<void> {
           target: [dailySummaries.userId, dailySummaries.localDate, dailySummaries.source],
           set: excludedSet(dailySummaries, [...cols, "rawIngestId", "ingestedAt"]),
         });
+      // Garmin wins over imported Apple Health days (docs/adr/0003-imports.md).
+      await supersedeApple(db, row.userId, "daily", rows.map((r) => r.localDate));
       return;
     }
     case "sleep_summaries": {
@@ -48,6 +51,8 @@ async function mapRow(db: Db, row: RawRow): Promise<void> {
           target: [sleepSessions.userId, sleepSessions.source, sleepSessions.sourceRecordId],
           set: excludedSet(sleepSessions, [...cols, "rawIngestId", "ingestedAt"]),
         });
+      await supersedeApple(db, row.userId, "sleep", rows.map((r) => r.localDate));
+      await supersedeExportSleep(db, row.userId, rows.map((r) => r.localDate));
       return;
     }
     case "hrv_daily": {
@@ -74,6 +79,7 @@ async function mapRow(db: Db, row: RawRow): Promise<void> {
           target: [activities.userId, activities.source, activities.sourceRecordId],
           set: excludedSet(activities, [...cols, "rawIngestId", "ingestedAt"]),
         });
+      await supersedeApple(db, row.userId, "activities", rows.map((r) => r.startTime.getTime()));
       return;
     }
     case "vo2max_daily": {
@@ -86,6 +92,7 @@ async function mapRow(db: Db, row: RawRow): Promise<void> {
           target: [vo2maxDaily.userId, vo2maxDaily.localDate, vo2maxDaily.sport, vo2maxDaily.source],
           set: excludedSet(vo2maxDaily, ["value", "rawIngestId", "ingestedAt"]),
         });
+      await supersedeApple(db, row.userId, "vo2max", rows.map((r) => r.localDate));
       return;
     }
     case "weight_range": {

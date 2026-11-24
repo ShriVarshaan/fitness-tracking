@@ -7,6 +7,7 @@ import { AppNav } from "@/components/app-nav";
 import { SleepTimingChart, type TimedNight } from "@/components/sleep-timing-chart";
 import { TrendChart } from "@/components/trend-chart";
 import { formatDay, formatDuration, formatNumber, formatRaceTime } from "@/lib/format";
+import { vendorLabel } from "@/lib/sources";
 import { onePerDay, weightBadge } from "@/lib/weight";
 import { cyclingPerformance, runningPerformance, type CyclingPerformance, type RunningPerformance } from "@/server/performance";
 import { createClient } from "@/lib/supabase/server";
@@ -62,17 +63,17 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
       derived("rhr_baseline"),
       supabase
         .from("daily_summaries")
-        .select("local_date, resting_hr, intensity_min_moderate, intensity_min_vigorous")
+        .select("local_date, source, resting_hr, intensity_min_moderate, intensity_min_vigorous")
         .gte("local_date", from)
         .lte("local_date", latestDate),
       supabase.from("hrv_daily").select("local_date, last_night_avg_ms").gte("local_date", from).lte("local_date", latestDate),
       supabase
         .from("sleep_sessions")
-        .select("local_date, start_time, end_time, tz_offset_min, total_sleep_s")
+        .select("local_date, source, start_time, end_time, tz_offset_min, total_sleep_s")
         .gte("local_date", from)
         .lte("local_date", latestDate)
         .order("end_time", { ascending: true }),
-      supabase.from("vo2max_daily").select("local_date, sport, value").gte("local_date", from).lte("local_date", latestDate),
+      supabase.from("vo2max_daily").select("local_date, sport, value, source").gte("local_date", from).lte("local_date", latestDate),
       supabase.from("profile").select("sleep_need_min").maybeSingle(),
       supabase.from("body_measurements").select("local_date, weight_kg, source").gte("local_date", from).lte("local_date", latestDate).order("local_date"),
       runningPerformance(supabase),
@@ -90,6 +91,10 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
   const vo2Run = align(axis, vo2Rows.filter((r) => r.sport === "running"), (r) => r.value);
   const weightRows = onePerDay((weight ?? []) as Array<{ local_date: string; weight_kg: number | null; source: string }>);
   const vo2Bike = align(axis, vo2Rows.filter((r) => r.sport === "cycling"), (r) => r.value);
+  const dayVendor = vendorLabel(((days ?? []) as Array<{ source: string; resting_hr: number | null }>).filter((d) => d.resting_hr != null).map((d) => d.source));
+  const sleepVendor = vendorLabel(nights.map((n) => (n as { source?: string }).source));
+  const vo2Vendor = vendorLabel(vo2Rows.map((r) => (r as { source?: string }).source));
+  const anyApple = [dayVendor, sleepVendor].some((v) => v.includes("Apple"));
 
   return (
     <Shell range={range}>
@@ -127,7 +132,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         />
       </Section>
 
-      <Section title="Recovery" intro="Nightly values are Garmin's. The shaded usual range and the 7-day averages are our estimates from your own history.">
+      <Section title="Recovery" intro={`Nightly and daily values are ${anyApple ? "as your devices recorded them" : "Garmin's"}. The shaded usual range and the 7-day averages are our estimates from your own history.`}>
         <TrendChart
           title="Overnight HRV"
           labels={axis}
@@ -148,7 +153,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
           labels={axis}
           unit="bpm"
           series={[
-            { name: "Daily (Garmin)", slot: 1, kind: "dots", values: align(axis, (days ?? []) as Array<{ local_date: string; resting_hr: number | null }>, (r) => r.resting_hr) },
+            { name: `Daily (${dayVendor})`, slot: 1, kind: "dots", values: align(axis, (days ?? []) as Array<{ local_date: string; resting_hr: number | null }>, (r) => r.resting_hr) },
             { name: "7-day average (estimate)", slot: 2, values: align(axis, rhrBase, (r) => r.value) },
           ]}
           band={{
@@ -168,7 +173,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         />
       </Section>
 
-      <Section title="Sleep" intro="Sleep times and durations are Garmin's. Timing variability is our estimate.">
+      <Section title="Sleep" intro={`Sleep times and durations are ${sleepVendor}'s. Timing variability is our estimate.`}>
         <TrendChart
           title="Sleep duration"
           labels={axis}
@@ -209,14 +214,14 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         />
         <TrendChart
           title="VO2 max"
-          badge="Garmin"
+          badge={vo2Vendor}
           labels={axis}
           unit="ml/kg/min"
           series={[
             ...(vo2Run.some((v) => v !== null) ? [{ name: "Running", slot: 1 as const, kind: "dots" as const, values: vo2Run }] : []),
             ...(vo2Bike.some((v) => v !== null) ? [{ name: "Cycling", slot: 2 as const, kind: "dots" as const, values: vo2Bike }] : []),
           ]}
-          note="Garmin updates VO2 max after runs or rides with heart rate and GPS (or power)."
+          note={vo2Vendor === "Garmin" ? "Garmin updates VO2 max after runs or rides with heart rate and GPS (or power)." : "Each device's own estimate. Garmin and Apple estimate VO2 max differently, so the two aren't directly comparable."}
         />
         {weightRows.length ? (
           <TrendChart

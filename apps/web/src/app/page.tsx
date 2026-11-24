@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadToday, type DerivedValue, type SleepNight } from "@/server/today";
 import { loadDemo, removeDemo } from "./demo-actions";
 import { PendingButton } from "./settings/garmin/pending-button";
+import { vendorLabel } from "@/lib/sources";
 
 export default async function TodayPage() {
   const supabase = await createClient();
@@ -58,9 +59,14 @@ function EmptyState({ connected }: { connected: boolean }) {
           ? "The first days usually appear within a few minutes. Use Sync now on the Garmin page to speed it up."
           : "Add your Garmin Personal API key to load your history."}
       </p>
-      <Link href="/settings/garmin" className="mt-3 inline-block text-sm font-medium underline">
-        Garmin settings
-      </Link>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
+        <Link href="/settings/garmin" className="underline">
+          Garmin settings
+        </Link>
+        <Link href="/settings/import" className="underline">
+          Import an export file
+        </Link>
+      </div>
       {!connected && (
         <div className="mt-5 space-y-2 border-t border-border pt-4">
           <h3 className="text-sm font-medium">No Garmin watch? Try it with demo data</h3>
@@ -148,7 +154,7 @@ function Dashboard({ data }: { data: Awaited<ReturnType<typeof loadToday>> }) {
           <Sparkline values={hrv} band={band} label="Overnight HRV, last 30 days, with Garmin's usual range shaded" />
         </Card>
 
-        <Card title="Resting heart rate" badge="Garmin">
+        <Card title="Resting heart rate" badge={vendorLabel([today?.source])}>
           <Big value={formatNumber(today?.resting_hr)} unit="bpm" />
           <p className="text-sm text-muted">7-day average {formatNumber(rhr7)} bpm</p>
           <Sparkline values={rhr} label="Resting heart rate, last 30 days" />

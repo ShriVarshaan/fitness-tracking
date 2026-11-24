@@ -13,6 +13,7 @@ export interface DaySummary {
   steps_goal: number | null;
   distance_m: number | null;
   resting_hr: number | null;
+  source: string;
   stress_avg: number | null;
   body_battery_high: number | null;
   body_battery_low: number | null;
@@ -118,7 +119,7 @@ export async function loadToday(): Promise<TodayData> {
     supabase
       .from("daily_summaries")
       .select(
-        "local_date, steps, steps_goal, distance_m, resting_hr, stress_avg, body_battery_high, body_battery_low, intensity_min_moderate, intensity_min_vigorous, intensity_min_goal",
+        "local_date, source, steps, steps_goal, distance_m, resting_hr, stress_avg, body_battery_high, body_battery_low, intensity_min_moderate, intensity_min_vigorous, intensity_min_goal",
       )
       .gte("local_date", from)
       .lte("local_date", latestDate),

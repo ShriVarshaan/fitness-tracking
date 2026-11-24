@@ -19,10 +19,10 @@ const isoDate = z.iso.date().describe("YYYY-MM-DD");
 
 /** Where each metric lives and how to show it. */
 const METRICS = {
-  resting_hr: { table: "daily_summaries", column: "resting_hr", unit: "bpm", label: "Resting heart rate (Garmin)" },
+  resting_hr: { table: "daily_summaries", column: "resting_hr", unit: "bpm", label: "Resting heart rate (from the user's watch: Garmin or Apple Health)" },
   hrv: { table: "hrv_daily", column: "last_night_avg_ms", unit: "ms", label: "Overnight HRV, RMSSD (Garmin)" },
-  sleep_duration: { table: "sleep_sessions", column: "total_sleep_s", unit: "s", label: "Sleep duration (Garmin)" },
-  steps: { table: "daily_summaries", column: "steps", unit: "steps", label: "Steps (Garmin)" },
+  sleep_duration: { table: "sleep_sessions", column: "total_sleep_s", unit: "s", label: "Sleep duration (from the user's watch: Garmin or Apple Health)" },
+  steps: { table: "daily_summaries", column: "steps", unit: "steps", label: "Steps (Garmin or Apple Health)" },
   stress: { table: "daily_summaries", column: "stress_avg", unit: "score", label: "Average stress (Garmin, 0-100)" },
   body_battery_high: { table: "daily_summaries", column: "body_battery_high", unit: "score", label: "Body Battery high (Garmin)" },
   readiness: { derived: "readiness", unit: "score", label: "Readiness (our estimate, 0-100)" },
@@ -31,7 +31,7 @@ const METRICS = {
   fatigue: { derived: "atl", unit: "load", label: "Fatigue, acute load (our estimate)" },
   form: { derived: "tsb", unit: "load", label: "Form = fitness - fatigue (our estimate)" },
   sleep_debt: { derived: "sleep_debt", unit: "s", label: "7-night sleep debt (our estimate)" },
-  weight: { table: "body_measurements", column: "weight_kg", unit: "kg", label: "Weight (entered by the user, or from a Garmin scale)" },
+  weight: { table: "body_measurements", column: "weight_kg", unit: "kg", label: "Weight (entered by the user, or from a Garmin scale or Apple Health)" },
   energy_eaten: { table: "food_log", column: "kcal", unit: "kcal", label: "Energy eaten, daily total from the food diary", sum: true },
   protein_eaten: { table: "food_log", column: "protein_g", unit: "g", label: "Protein eaten, daily total from the food diary", sum: true },
 } as const;

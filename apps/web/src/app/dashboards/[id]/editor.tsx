@@ -79,7 +79,7 @@ export function DashboardEditor({ id, name: initialName, panels: initial }: { id
                         <optgroup key={g} label={g}>
                           {CHART_METRICS.filter((m) => m.group === g && (slot === 0 || m.unit === unit)).map((m) => (
                             <option key={m.code} value={m.code}>
-                              {m.label} ({m.badge === "Estimate" ? "estimate" : m.badge === "Garmin" ? "Garmin" : "yours"})
+                              {m.label} ({m.badge === "Estimate" ? "estimate" : m.badge === "Garmin" ? "Garmin" : m.badge === "Measured" ? "measured" : "yours"})
                             </option>
                           ))}
                         </optgroup>

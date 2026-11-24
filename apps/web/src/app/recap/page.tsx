@@ -65,7 +65,7 @@ export default async function RecapPage(props: PageProps<"/recap">) {
   return (
     <Shell year={year} years={years}>
       <p className="text-sm text-muted">
-        {soFar ? `${year} so far: ${covered} days.` : `${year}.`} Activity totals are from your recorded sessions; recovery figures are Garmin&rsquo;s nightly values.
+        {soFar ? `${year} so far: ${covered} days.` : `${year}.`} Activity totals are from your recorded sessions; recovery figures are your watch&rsquo;s nightly values.
       </p>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">

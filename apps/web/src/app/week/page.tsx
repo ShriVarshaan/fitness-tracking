@@ -148,7 +148,7 @@ export default async function WeekPage() {
           </table>
         </div>
         <p className="text-xs text-muted">
-          Training load is our estimate (Edwards TRIMP); sleep and HRV are Garmin&rsquo;s nightly values.
+          Training load is our estimate (Edwards TRIMP); sleep and HRV are your watch&rsquo;s nightly values.
         </p>
       </section>
     </main>

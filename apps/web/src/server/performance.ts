@@ -100,6 +100,8 @@ export async function runningPerformance(supabase: Supabase): Promise<RunningPer
     const speeds = meanMaximal(time, [...speedPerSample.slice(1), null], CRITICAL_DURATIONS_S);
     per.push({ id: a.source_record_id, date: a.local_date, times: bestEffortTimes(time, d, targets), speeds });
   }
+  // Runs without an activity file (e.g. imported from Apple Health) have no streams: nothing to show.
+  if (!per.length) return null;
   const bests = bestAcross(per.map((p) => ({ id: p.id, date: p.date, values: p.times })), "min");
   const speedBests = bestAcross(per.map((p) => ({ id: p.id, date: p.date, values: p.speeds })), "max");
   return {

@@ -50,7 +50,7 @@ export function InsightCard({ insight, link }: { insight: Insight; link?: { href
               <li key={e.id} className="rounded-full border border-border px-2.5 py-1 text-xs">
                 {e.label}: <span className="font-medium tabular-nums">{formatValue(e.value, e.unit)}</span>
                 {e.baseline !== undefined && <span className="text-muted"> ({e.baselineLabel ?? "usual"} {formatValue(e.baseline, e.unit)})</span>}
-                <span className="text-muted"> · {e.source === "garmin" ? "Garmin" : "estimate"}</span>
+                <span className="text-muted"> · {e.source === "garmin" ? "measured" : "estimate"}</span>
               </li>
             ))}
           </ul>

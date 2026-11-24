@@ -17,6 +17,7 @@ const LINKS = [
 const SETTINGS = [
   { href: "/settings/account", label: "Account" },
   { href: "/settings/garmin", label: "Garmin" },
+  { href: "/settings/import", label: "Import" },
   { href: "/settings/security", label: "Security" },
 ] as const;
 

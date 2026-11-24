@@ -182,7 +182,7 @@ export default async function NutritionPage(props: PageProps<"/nutrition">) {
                     </button>
                   </form>
                 ) : (
-                  <span className="text-xs text-muted">Garmin</span>
+                  <span className="text-xs text-muted">{w.source === "garmin" ? "Garmin" : "Apple Health"}</span>
                 )}
               </li>
             ))}
