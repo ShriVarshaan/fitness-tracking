@@ -6,7 +6,7 @@ import type { ImportSource } from "@/lib/import/rows";
 import { runAppleHealth, runGarminExport, type ImportSummary, type KindSummary } from "@/lib/import/run";
 import { finishImport, importBatchAction, startImport } from "./actions";
 
-const LABEL = { daily: "Days", sleep: "Nights", activities: "Activities", weight: "Weights", vo2max: "VO2 max values" } as const;
+const LABEL = { daily: "Days", sleep: "Nights", sleep_stages: "Sleep stage periods", activities: "Activities", weight: "Weights", vo2max: "VO2 max values" } as const;
 
 type State =
   | { phase: "idle" }

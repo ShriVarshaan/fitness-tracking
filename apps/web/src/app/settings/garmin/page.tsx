@@ -22,6 +22,7 @@ const STATUS_TEXT = {
 } as const;
 
 const DATA_TYPE_LABEL: Record<string, string> = {
+  sleep_levels: "Sleep stages",
   daily_summaries: "Daily summaries",
   sleep: "Sleep",
   hrv: "HRV",

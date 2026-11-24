@@ -105,6 +105,28 @@ export const sleepSessions = pgTable(
   ],
 ).enableRLS();
 
+/**
+ * Sleep stage intervals inside a night (Garmin sleep levels, Apple Health
+ * sleep samples), dated like the night: the local morning of waking. Used for
+ * the Sleep Regularity Index; a night's rows are replaced as a whole.
+ */
+export const sleepStages = pgTable(
+  "sleep_stages",
+  {
+    userId: userId(),
+    source: text("source").notNull(),
+    localDate: date("local_date").notNull(),
+    startTime: timestamp("start_time", { withTimezone: true }).notNull(),
+    endTime: timestamp("end_time", { withTimezone: true }).notNull(),
+    stage: text("stage", { enum: ["deep", "light", "rem", "awake", "asleep"] }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.source, t.localDate, t.startTime] }),
+    check("sleep_stages_order", sql`${t.endTime} > ${t.startTime}`),
+    ownerReadPolicy("sleep_stages"),
+  ],
+).enableRLS();
+
 /** Garmin's overnight HRV summary (RMSSD, milliseconds). */
 export const hrvDaily = pgTable(
   "hrv_daily",

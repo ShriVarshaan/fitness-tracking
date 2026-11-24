@@ -25,3 +25,4 @@ The Personal API loads about a year of history (ADR 0001). Older Garmin history 
 - The export mappers follow published samples; Garmin documents neither export. When a field is missing, the row keeps a null rather than a guess, and the import summary lists skipped records and unreadable files.
 - Activity charts aren't available for imported activities older than a year, or for Apple workouts.
 - Labels name the source where both can supply a value: resting HR, steps, sleep and VO2 max say Garmin or Apple Health as appropriate, and insight evidence says "measured".
+- Apple Health sleep stages are stored in `sleep_stages` (source `apple_health`), only for nights stored from Apple Health, and are removed with them when Garmin's night arrives. Batches keep each night whole, because a night's stages are replaced as a unit.

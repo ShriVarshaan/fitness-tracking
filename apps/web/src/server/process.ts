@@ -1,11 +1,11 @@
 import "server-only";
 import { schema, type Db } from "@ft/db";
-import { isEmptyPayload, mapActivities, mapDailySummaries, mapHrv, mapSleepSummaries, mapVo2max, mapWeight } from "@ft/garmin";
+import { isEmptyPayload, mapActivities, mapDailySummaries, mapHrv, mapSleepLevels, mapSleepSummaries, mapVo2max, mapWeight } from "@ft/garmin";
 import { and, asc, eq, getTableColumns, isNull, sql, type Column, type SQL, type Table } from "drizzle-orm";
 import { ZodError } from "zod";
 import { supersedeApple, supersedeExportSleep } from "./imports";
 
-const { rawIngest, dailySummaries, sleepSessions, hrvDaily, activities, vo2maxDaily, bodyMeasurements } = schema;
+const { rawIngest, dailySummaries, sleepSessions, sleepStages, hrvDaily, activities, vo2maxDaily, bodyMeasurements } = schema;
 
 type RawRow = typeof rawIngest.$inferSelect;
 
@@ -93,6 +93,17 @@ async function mapRow(db: Db, row: RawRow): Promise<void> {
           set: excludedSet(vo2maxDaily, ["value", "rawIngestId", "ingestedAt"]),
         });
       await supersedeApple(db, row.userId, "vo2max", rows.map((r) => r.localDate));
+      return;
+    }
+    case "sleep_day": {
+      const rows = mapSleepLevels(row.payload);
+      if (rows.length === 0) return;
+      const date = rows[0]!.localDate;
+      // A night's stages are replaced as a whole; Garmin's replace any from Apple Health.
+      await db.transaction(async (tx) => {
+        await tx.delete(sleepStages).where(and(eq(sleepStages.userId, row.userId), eq(sleepStages.localDate, date)));
+        await tx.insert(sleepStages).values(rows.map((r) => ({ userId: row.userId, source: "garmin", ...r })));
+      });
       return;
     }
     case "weight_range": {

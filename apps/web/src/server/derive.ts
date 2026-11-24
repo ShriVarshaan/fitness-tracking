@@ -24,9 +24,9 @@ import {
   type SessionInput,
   type WeeklyInputs,
 } from "@ft/metrics";
-import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
 
-const { activities, activityFeedback, activityStreams, dailySummaries, plannedWorkouts, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions } = schema;
+const { activities, activityFeedback, activityStreams, dailySummaries, plannedWorkouts, derivedDaily, findings, hrvDaily, insights, profile, sleepSessions, sleepStages } = schema;
 
 const CHUNK = 500;
 const DEFAULT_SLEEP_NEED_MIN = 480;
@@ -145,7 +145,7 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .limit(WAKE_NIGHTS),
     // Sleep start and end per night, for the Sleep Regularity Index.
     db
-      .select({ date: sleepSessions.localDate, start: sleepSessions.startTime, end: sleepSessions.endTime, tz: sleepSessions.tzOffsetMin })
+      .select({ date: sleepSessions.localDate, source: sleepSessions.source, start: sleepSessions.startTime, end: sleepSessions.endTime, tz: sleepSessions.tzOffsetMin })
       .from(sleepSessions)
       .where(eq(sleepSessions.userId, userId)),
     db
@@ -174,6 +174,19 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
     streams.set(key, entry);
   }
 
+  // Asleep periods from sleep stages (Garmin sleep levels, Apple Health), per source and night.
+  const stageRows = await db
+    .select({ date: sleepStages.localDate, source: sleepStages.source, start: sleepStages.startTime, end: sleepStages.endTime, stage: sleepStages.stage })
+    .from(sleepStages)
+    .where(and(eq(sleepStages.userId, userId), ne(sleepStages.stage, "awake")));
+  const asleepByNight = new Map<string, Array<[number, number]>>();
+  for (const s of stageRows) {
+    const key = `${s.source}|${s.date}`;
+    const list = asleepByNight.get(key) ?? [];
+    list.push([s.start.getTime(), s.end.getTime()]);
+    asleepByNight.set(key, list);
+  }
+
   const present = <T extends { value: number | null }>(rows: Array<T & { date: string }>) =>
     rows.filter((r): r is T & { date: string; value: number } => typeof r.value === "number").map((r) => ({ date: r.date, value: r.value }));
 
@@ -187,7 +200,12 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       return { id: a.id, date: a.date, zoneSeconds: a.zoneSeconds, hrStream: s?.timeS && s.hr ? { timeS: s.timeS, hr: s.hr } : null };
     }),
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
-    sleepNights: sleepTimes.map((n) => ({ date: n.date, tzOffsetMin: n.tz, asleep: [[n.start.getTime(), n.end.getTime()]] as Array<[number, number]>, fromStages: false })),
+    sleepNights: sleepTimes.map((n) => {
+      const staged = asleepByNight.get(`${n.source}|${n.date}`);
+      return staged
+        ? { date: n.date, tzOffsetMin: n.tz, asleep: staged, fromStages: true }
+        : { date: n.date, tzOffsetMin: n.tz, asleep: [[n.start.getTime(), n.end.getTime()]] as Array<[number, number]>, fromStages: false };
+    }),
     daily: days.map((d) => ({ date: d.date, steps: d.steps, moderate: d.moderate, vigorous: d.vigorous })),
     activityDurations: acts.map((a) => ({ date: a.date, durationS: a.durationS })),
     stepsGoal: new Map(days.flatMap((d) => (d.stepsGoal ? [[d.date, d.stepsGoal] as const] : []))),

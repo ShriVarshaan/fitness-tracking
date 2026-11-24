@@ -110,8 +110,14 @@ describe("planBackfill", () => {
 
   it("puts every type's newest chunk first", () => {
     const jobs = planBackfill("2026-11-16", 365);
-    const firstRound = new Set(jobs.slice(0, 6).map((j) => j.dataType));
-    expect(firstRound.size).toBe(6);
+    const firstRound = new Set(jobs.slice(0, 7).map((j) => j.dataType));
+    expect(firstRound.size).toBe(7);
+  });
+
+  it("loads only 28 nights of sleep stages (one call per night)", () => {
+    const levels = planBackfill("2026-11-16", 365).filter((j) => j.dataType === "sleep_levels");
+    expect(levels).toHaveLength(4);
+    expect(levels.at(-1)).toMatchObject({ from: "2026-10-20" });
   });
 });
 
@@ -126,6 +132,13 @@ describe("planIncremental", () => {
     });
   });
 
+  it("loads a short-history type's whole window the first time, then overlaps by one day", () => {
+    const first = planIncremental("2026-11-16", {}).filter((j) => j.dataType === "sleep_levels");
+    expect(first.at(-1)?.from).toBe("2026-10-20"); // 28 days
+    const next = planIncremental("2026-11-16", { sleep_levels: "2026-11-16" }).filter((j) => j.dataType === "sleep_levels");
+    expect(next).toEqual([{ kind: "incremental", dataType: "sleep_levels", from: "2026-11-15", to: "2026-11-16" }]);
+  });
+
   it("never reaches further back than the history window", () => {
     const jobs = planIncremental("2026-11-16", { hrv: "2020-01-01" }, 30);
     const hrv = jobs.filter((j) => j.dataType === "hrv");
@@ -134,6 +147,13 @@ describe("planIncremental", () => {
 });
 
 describe("fetchJob", () => {
+  it("calls the single-night sleep endpoint once per date", async () => {
+    const fetchImpl = vi.fn().mockImplementation(async () => respond(JSON.stringify({ dailySleepDTO: {} })));
+    const out = await fetchJob(new GarminClient("t", fetchImpl), { dataType: "sleep_levels", from: "2026-11-14", to: "2026-11-16" });
+    expect(out.map((o) => o.endpoint)).toEqual(["sleep_day", "sleep_day", "sleep_day"]);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain("date=2026-11-14");
+  });
+
   it("pages through activities until a short page", async () => {
     const page = (n: number) => JSON.stringify(Array.from({ length: n }, (_, i) => ({ activityId: i + 1 })));
     const fetchImpl = vi

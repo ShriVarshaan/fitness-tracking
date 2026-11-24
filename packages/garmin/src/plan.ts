@@ -12,7 +12,13 @@ export const DATA_TYPES = {
   vo2max: { chunkDays: 28 },
   weight: { chunkDays: 90 },
   activities: { chunkDays: 30 },
-} as const satisfies Record<string, { chunkDays: number }>;
+  // One call per night (the endpoint takes a single date), so only recent nights:
+  // the Sleep Regularity Index needs the last 14.
+  sleep_levels: { chunkDays: 7, historyDays: 28, overlapDays: 1 },
+} as const satisfies Record<string, { chunkDays: number; historyDays?: number; overlapDays?: number }>;
+
+const historyOf = (t: DataType, fallback: number) => Math.min(fallback, (DATA_TYPES[t] as { historyDays?: number }).historyDays ?? fallback);
+const overlapOf = (t: DataType) => (DATA_TYPES[t] as { overlapDays?: number }).overlapDays ?? INCREMENTAL_OVERLAP_DAYS;
 
 export type DataType = keyof typeof DATA_TYPES;
 export const ALL_DATA_TYPES = Object.keys(DATA_TYPES) as DataType[];
@@ -46,9 +52,12 @@ export function chunkRange(from: LocalDate, to: LocalDate, size: number): Array<
 
 /** Jobs to load history for every data type, newest first so recent days appear soonest. */
 export function planBackfill(today: LocalDate, historyDays = DEFAULT_HISTORY_DAYS): PlannedJob[] {
-  const from = addDays(today, -(historyDays - 1));
   const perType = ALL_DATA_TYPES.map((dataType) =>
-    chunkRange(from, today, DATA_TYPES[dataType].chunkDays).map((r) => ({ kind: "backfill" as const, dataType, ...r })),
+    chunkRange(addDays(today, -(historyOf(dataType, historyDays) - 1)), today, DATA_TYPES[dataType].chunkDays).map((r) => ({
+      kind: "backfill" as const,
+      dataType,
+      ...r,
+    })),
   );
   // Interleave by chunk index: every type's newest chunk, then every type's next chunk, ...
   const out: PlannedJob[] = [];
@@ -68,10 +77,13 @@ export function planIncremental(
   lastSynced: Partial<Record<DataType, LocalDate>>,
   historyDays = DEFAULT_HISTORY_DAYS,
 ): PlannedJob[] {
-  const floor = addDays(today, -(historyDays - 1));
   return ALL_DATA_TYPES.flatMap((dataType) => {
+    const floor = addDays(today, -(historyOf(dataType, historyDays) - 1));
     const last = lastSynced[dataType];
-    let from = last ? addDays(last, -INCREMENTAL_OVERLAP_DAYS) : addDays(today, -INCREMENTAL_OVERLAP_DAYS);
+    const overlap = overlapOf(dataType);
+    // A type added after the key was connected has never synced: load its (short) history now.
+    const short = (DATA_TYPES[dataType] as { historyDays?: number }).historyDays !== undefined;
+    let from = last ? addDays(last, -overlap) : short ? floor : addDays(today, -overlap);
     if (daysBetween(floor, from) < 0) from = floor;
     return chunkRange(from, today, DATA_TYPES[dataType].chunkDays).map((r) => ({ kind: "incremental" as const, dataType, ...r }));
   });
@@ -99,6 +111,14 @@ export async function fetchJob(client: GarminClient, job: Pick<PlannedJob, "data
       return [{ endpoint: "vo2max_daily", payload: await client.vo2maxDaily(from, to) }];
     case "weight":
       return [{ endpoint: "weight_range", payload: await client.weightRange(from, to) }];
+    case "sleep_levels": {
+      // The single-night endpoint: one call per date, oldest first.
+      const out: FetchedPayload[] = [];
+      for (let d = from; daysBetween(d, to) >= 0; d = addDays(d, 1)) {
+        out.push({ endpoint: "sleep_day", payload: await client.sleepDay(d) });
+      }
+      return out;
+    }
     case "activities": {
       const pages: FetchedPayload[] = [];
       for (let page = 0; page < MAX_ACTIVITY_PAGES; page++) {

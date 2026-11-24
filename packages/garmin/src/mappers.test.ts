@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isEmptyPayload,
   mapWeight,
+  mapSleepLevels,
   mapActivities,
   mapDailySummaries,
   mapHrv,
@@ -310,5 +311,34 @@ describe("mapWeight", () => {
   it("maps an empty range to no rows", () => {
     expect(mapWeight({ dailyWeightSummaries: [], totalAverage: {} })).toEqual([]);
     expect(mapWeight(null)).toEqual([]);
+  });
+});
+
+describe("mapSleepLevels", () => {
+  const level = (start: string, end: string, activityLevel: number) => ({ startGMT: start, endGMT: end, activityLevel });
+
+  it("maps levels to stages for the night's date", () => {
+    const rows = mapSleepLevels({
+      dailySleepDTO: { calendarDate: "2026-11-20", sleepStartTimestampGMT: 1 },
+      sleepLevels: [level("2026-11-19T23:10:00.0", "2026-11-20T00:40:00.0", 1.0), level("2026-11-20T00:40:00.0", "2026-11-20T01:30:00.0", 0), level("2026-11-20T01:30:00.0", "2026-11-20T01:40:00.0", 3), level("2026-11-20T01:40:00.0", "2026-11-20T02:20:00.0", 2)],
+    });
+    expect(rows.map((r) => [r.stage, r.startTime.toISOString()])).toEqual([
+      ["light", "2026-11-19T23:10:00.000Z"],
+      ["deep", "2026-11-20T00:40:00.000Z"],
+      ["awake", "2026-11-20T01:30:00.000Z"],
+      ["rem", "2026-11-20T01:40:00.000Z"],
+    ]);
+    expect(rows.every((r) => r.localDate === "2026-11-20")).toBe(true);
+  });
+
+  it("maps a night without levels, or no night, to nothing", () => {
+    expect(mapSleepLevels({ dailySleepDTO: { calendarDate: "2026-11-20" } })).toEqual([]);
+    expect(mapSleepLevels({ dailySleepDTO: { calendarDate: null }, sleepLevels: [] })).toEqual([]);
+    expect(mapSleepLevels(null)).toEqual([]);
+  });
+
+  it("throws on an unknown shape or level, so the response is quarantined", () => {
+    expect(() => mapSleepLevels({ sleepLevels: [] })).toThrow();
+    expect(() => mapSleepLevels({ dailySleepDTO: { calendarDate: "2026-11-20" }, sleepLevels: [level("2026-11-20T00:00:00.0", "2026-11-20T01:00:00.0", 7)] })).toThrow(/level 7/);
   });
 });

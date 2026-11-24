@@ -148,6 +148,13 @@
       "when": 1795128235466,
       "tag": "20261119224355_dashboards",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1795537533818,
+      "tag": "20261124162533_sleep_stages",
+      "breakpoints": true
     }
   ]
 }

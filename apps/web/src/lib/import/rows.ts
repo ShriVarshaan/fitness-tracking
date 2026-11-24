@@ -79,6 +79,10 @@ export const stageInterval = z.object({
   stage: z.enum(SLEEP_STAGES),
 });
 export type StageInterval = z.infer<typeof stageInterval>;
+export const stageRow = stageInterval.extend({ localDate: date }).refine((s) => Date.parse(s.end) > Date.parse(s.start), { message: "a stage must end after it starts" });
+export type StageImportRow = z.input<typeof stageRow>;
+/** Stage rows per call: whole nights are kept together (about 100 bytes each). */
+export const STAGE_BATCH_SIZE = 1500;
 
 export const activityRow = z.object({
   sourceRecordId: id,
@@ -132,6 +136,7 @@ export const importBatch = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("daily"), rows: z.array(dailyRow).max(BATCH_SIZE) }),
   z.object({ kind: z.literal("sleep"), rows: z.array(sleepRow).max(BATCH_SIZE) }),
   z.object({ kind: z.literal("activities"), rows: z.array(activityRow).max(BATCH_SIZE) }),
+  z.object({ kind: z.literal("sleep_stages"), rows: z.array(stageRow).max(STAGE_BATCH_SIZE) }),
   z.object({ kind: z.literal("weight"), rows: z.array(weightRow).max(BATCH_SIZE) }),
   z.object({ kind: z.literal("vo2max"), rows: z.array(vo2Row).max(BATCH_SIZE) }),
 ]);

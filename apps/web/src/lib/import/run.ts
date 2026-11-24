@@ -1,6 +1,6 @@
 import { AppleHealthParser } from "./apple-health";
 import { garminExportKind, mapGarminExportActivities, mapGarminExportDaily, mapGarminExportSleep } from "./garmin-export";
-import { activityRow, BATCH_SIZE, dailyRow, sleepRow, vo2Row, weightRow, type ImportBatch, type ImportKind } from "./rows";
+import { activityRow, BATCH_SIZE, dailyRow, sleepRow, STAGE_BATCH_SIZE, stageRow, vo2Row, weightRow, type ImportBatch, type ImportKind, type StageImportRow } from "./rows";
 import { listZip, openEntry, readEntryText, streamText, type ZipSource } from "./zip";
 
 /**
@@ -24,7 +24,7 @@ export type ImportSummary = Partial<Record<ImportKind, KindSummary>> & { problem
 export type SendBatch = (batch: ImportBatch) => Promise<{ ok: true; written: number; superseded: number } | { ok: false; message: string }>;
 export type Progress = (stage: string, fraction: number | null) => void;
 
-const SCHEMAS = { daily: dailyRow, sleep: sleepRow, activities: activityRow, weight: weightRow, vo2max: vo2Row } as const;
+const SCHEMAS = { daily: dailyRow, sleep: sleepRow, sleep_stages: stageRow, activities: activityRow, weight: weightRow, vo2max: vo2Row } as const;
 
 /** Let the page repaint between chunks of work. */
 const yieldToUi = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -40,9 +40,10 @@ async function sendAll(kind: ImportKind, rows: unknown[], invalidAlready: number
     if (schema.safeParse(r).success) valid.push(r);
     else s.invalid++;
   }
-  for (let i = 0; i < valid.length; i += BATCH_SIZE) {
-    progress(`Saving ${label}`, valid.length ? i / valid.length : null);
-    const res = await send({ kind, rows: valid.slice(i, i + BATCH_SIZE) } as ImportBatch);
+  const parts = batches(kind, valid);
+  for (const [i, rows] of parts.entries()) {
+    progress(`Saving ${label}`, i / parts.length);
+    const res = await send({ kind, rows } as ImportBatch);
     if (!res.ok) {
       summary.problems.push(res.message);
       return;
@@ -50,6 +51,33 @@ async function sendAll(kind: ImportKind, rows: unknown[], invalidAlready: number
     s.written += res.written;
     s.superseded += res.superseded;
   }
+}
+
+/** Split rows into request-sized batches; sleep stages keep each night in one batch. */
+function batches(kind: ImportKind, rows: unknown[]): unknown[][] {
+  const out: unknown[][] = [];
+  if (kind !== "sleep_stages") {
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) out.push(rows.slice(i, i + BATCH_SIZE));
+    return out;
+  }
+  const byNight = new Map<string, unknown[]>();
+  for (const r of rows) {
+    const d = (r as StageImportRow).localDate;
+    const list = byNight.get(d);
+    if (list) list.push(r);
+    else byNight.set(d, [r]);
+  }
+  let cur: unknown[] = [];
+  for (const night of byNight.values()) {
+    const whole = night.slice(0, STAGE_BATCH_SIZE);
+    if (cur.length + whole.length > STAGE_BATCH_SIZE) {
+      out.push(cur);
+      cur = [];
+    }
+    cur.push(...whole);
+  }
+  if (cur.length) out.push(cur);
+  return out;
 }
 
 /** Garmin account export ZIP (DI_CONNECT/...). */
@@ -116,15 +144,17 @@ export async function runAppleHealth(file: ZipSource & { name?: string }, send: 
     }
   });
   const r = parser.finish();
-  // The night's stage list isn't stored yet: send the night itself.
   const nights = r.sleep.map((n) => {
     const night: Partial<typeof n> = { ...n };
     delete night.stages;
     return night;
   });
+  const stages = r.sleep.flatMap((n) => n.stages.map((s) => ({ ...s, localDate: n.localDate })));
   await sendAll("activities", r.activities, 0, send, summary, progress, "workouts");
   await sendAll("daily", r.daily, 0, send, summary, progress, "daily totals");
   await sendAll("sleep", nights, 0, send, summary, progress, "sleep");
+  // After the nights, so the server keeps stages only for nights it stored.
+  await sendAll("sleep_stages", stages, 0, send, summary, progress, "sleep stages");
   await sendAll("weight", r.weight, 0, send, summary, progress, "weight");
   await sendAll("vo2max", r.vo2max, 0, send, summary, progress, "VO2 max");
   if (r.skipped) summary.problems.push(`${r.skipped.toLocaleString("en-GB")} records had dates or values that couldn't be read and were skipped.`);

@@ -20,6 +20,7 @@ Garmin publishes token instructions and an FAQ for the Personal API, but no endp
    | HRV | `/hrv-service/hrv/daily/{start}/{end}` |
    | VO2 max | `/metrics-service/metrics/maxmet/daily/{start}/{end}` |
    | Weight | `/weight-service/weight/range/{start}/{end}` |
+   | Sleep levels (one night) | `/sleep-service/sleep/dailySleep` (`date`), added Nov 2026 |
    | Activities | `/activitylist-service/activities/search/activities` (`start`, `limit`, `startDate`, `endDate`) |
    | Original activity file | `/download-service/files/activity/{id}` (ZIP with the FIT file) |
 
@@ -38,3 +39,4 @@ Garmin publishes token instructions and an FAQ for the Personal API, but no endp
 
 - Mappers (`packages/garmin/src/mappers.ts`) are written against the observed shapes and are tolerant. A response that fails validation is quarantined: kept raw with an error set, not dropped.
 - Weight (Nov 2026): the account still has no weight data, so the mapper follows Garmin Connect's web shape (`dailyWeightSummaries[].allWeightMetrics[]`, weight in grams). A weight outside 20–400 kg after conversion quarantines the response instead of storing it wrong. Garmin weights are stored in `body_measurements` with source `garmin`; on a day with both, the weight entered in the app wins.
+- Sleep levels (Nov 2026): the single-night endpoint is the only one that could carry intra-night stages, and it hasn't been observed yet. The mapper follows Garmin Connect's web response for the same service (`sleepLevels[]` with `startGMT`, `endGMT` and `activityLevel` 0 = deep, 1 = light, 2 = REM, 3 = awake). A response without `dailySleepDTO`, or with an unknown level, is quarantined. Because it costs one call per night, only the last 28 nights are loaded, and each sync re-reads the last two. If the first real responses carry no `sleepLevels`, the Sleep Regularity Index keeps using sleep start and end (flagged approximate), and this data type can be dropped.

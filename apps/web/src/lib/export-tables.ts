@@ -6,6 +6,7 @@ export const EXPORT_TABLES = [
   "garmin_connection",
   "daily_summaries",
   "sleep_sessions",
+  "sleep_stages",
   "hrv_daily",
   "vo2max_daily",
   "activities",

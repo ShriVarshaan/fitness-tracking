@@ -26,6 +26,8 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
   daily_summaries: (u) => sql`insert into daily_summaries (user_id, local_date, steps) values (${u}, '2026-01-01', 1000)`,
   sleep_sessions: (u) =>
     sql`insert into sleep_sessions (user_id, local_date, start_time, end_time, source_record_id) values (${u}, '2026-01-01', now(), now(), 's1')`,
+  sleep_stages: (u) =>
+    sql`insert into sleep_stages (user_id, source, local_date, start_time, end_time, stage) values (${u}, 'garmin', '2026-01-01', now() - interval '1 hour', now(), 'deep')`,
   hrv_daily: (u) => sql`insert into hrv_daily (user_id, local_date, last_night_avg_ms) values (${u}, '2026-01-01', 60)`,
   activities: (u) =>
     sql`insert into activities (user_id, sport, start_time, local_date, source_record_id) values (${u}, 'running', now(), '2026-01-01', 'a1')`,
@@ -61,6 +63,7 @@ const SERVER_WRITE_ONLY = [
   "raw_ingest",
   "daily_summaries",
   "sleep_sessions",
+  "sleep_stages",
   "hrv_daily",
   "activities",
   "vo2max_daily",

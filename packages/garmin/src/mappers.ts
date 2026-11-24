@@ -480,6 +480,48 @@ export function mapWeight(payload: unknown): WeightRow[] {
   return rows;
 }
 
+// ---------------------------------------------------------------------------------
+// Sleep levels: GET /sleep-service/sleep/dailySleep?date=… → { dailySleepDTO, sleepLevels: [...] }
+// Not yet observed from the Personal API (the account's first call will show it).
+// This follows Garmin Connect's web response for the same service: sleepLevels
+// entries with startGMT / endGMT ("YYYY-MM-DDTHH:mm:ss.0", UTC) and activityLevel
+// 0 = deep, 1 = light, 2 = REM, 3 = awake. A response without dailySleepDTO
+// throws (quarantined); a night without sleepLevels maps to no stages.
+// ---------------------------------------------------------------------------------
+
+const sleepLevel = z.object({ startGMT: z.string(), endGMT: z.string(), activityLevel: z.number() });
+export const sleepDayResponse = z.object({
+  dailySleepDTO: z.object({ calendarDate: z.iso.date().nullish() }).passthrough(),
+  sleepLevels: z.array(sleepLevel).nullish(),
+});
+
+export type SleepStage = "deep" | "light" | "rem" | "awake";
+const LEVELS: Record<number, SleepStage> = { 0: "deep", 1: "light", 2: "rem", 3: "awake" };
+
+export interface SleepStageRow {
+  localDate: string;
+  startTime: Date;
+  endTime: Date;
+  stage: SleepStage;
+}
+
+export function mapSleepLevels(payload: unknown): SleepStageRow[] {
+  if (payload === null) return [];
+  const { dailySleepDTO, sleepLevels } = sleepDayResponse.parse(payload);
+  const localDate = dailySleepDTO.calendarDate;
+  if (!localDate || !sleepLevels?.length) return [];
+  const rows: SleepStageRow[] = [];
+  for (const l of sleepLevels) {
+    const stage = LEVELS[Math.round(l.activityLevel)];
+    const start = garminTs(l.startGMT);
+    const end = garminTs(l.endGMT);
+    if (!stage) throw new Error(`sleep level ${l.activityLevel} is not one the app knows`);
+    if (Number.isNaN(start) || Number.isNaN(end) || end <= start) continue;
+    rows.push({ localDate, startTime: new Date(start), endTime: new Date(end), stage });
+  }
+  return rows;
+}
+
 /** True for the "nothing here" responses Garmin returns for empty ranges. */
 export function isEmptyPayload(payload: unknown): boolean {
   if (payload === null || payload === undefined) return true;

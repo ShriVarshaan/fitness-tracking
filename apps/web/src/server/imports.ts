@@ -5,7 +5,7 @@ import { and, eq, getTableColumns, gte, inArray, like, lte, ne, notLike, sql, ty
 import type { z } from "zod";
 import type { ImportSource, importBatch } from "@/lib/import/rows";
 
-const { activities, bodyMeasurements, dailySummaries, sleepSessions, vo2maxDaily } = schema;
+const { activities, bodyMeasurements, dailySummaries, sleepSessions, sleepStages, vo2maxDaily } = schema;
 
 /**
  * Imports from export files (docs/adr/0003-imports.md). Precedence, so each day
@@ -119,6 +119,30 @@ export async function importRows(db: Db, userId: string, source: ImportSource, b
       return { written: res.length, superseded: batch.rows.length - res.length };
     }
 
+    case "sleep_stages": {
+      // Apple only: stages for nights stored from Apple Health (not ones Garmin has). Batches hold whole nights.
+      const nights = dates(batch.rows);
+      if (!nights.length) return { written: 0, superseded: 0 };
+      const kept = await db
+        .select({ d: sleepSessions.localDate })
+        .from(sleepSessions)
+        .where(and(eq(sleepSessions.userId, userId), eq(sleepSessions.source, stored), inArray(sleepSessions.localDate, nights)));
+      const keep = new Set(kept.map((k) => k.d));
+      const rows = batch.rows.filter((r) => keep.has(r.localDate));
+      await db.transaction(async (tx) => {
+        if (keep.size) {
+          await tx.delete(sleepStages).where(and(eq(sleepStages.userId, userId), eq(sleepStages.source, stored), inArray(sleepStages.localDate, [...keep])));
+        }
+        if (rows.length) {
+          await tx
+            .insert(sleepStages)
+            .values(rows.map((r) => ({ userId, source: stored, localDate: r.localDate, startTime: new Date(r.start), endTime: new Date(r.end), stage: r.stage })))
+            .onConflictDoNothing();
+        }
+      });
+      return { written: rows.length, superseded: batch.rows.length - rows.length };
+    }
+
     case "weight": {
       if (!batch.rows.length) return { written: 0, superseded: 0 };
       // Weights keep every source; readers pick one per day (yours, then Garmin, then Apple).
@@ -174,6 +198,7 @@ export async function supersedeApple(db: Db, userId: string, kind: "daily" | "sl
     await db.delete(dailySummaries).where(and(eq(dailySummaries.userId, userId), eq(dailySummaries.source, "apple_health"), inArray(dailySummaries.localDate, keys as string[])));
   } else if (kind === "sleep") {
     await db.delete(sleepSessions).where(and(eq(sleepSessions.userId, userId), eq(sleepSessions.source, "apple_health"), inArray(sleepSessions.localDate, keys as string[])));
+    await db.delete(sleepStages).where(and(eq(sleepStages.userId, userId), eq(sleepStages.source, "apple_health"), inArray(sleepStages.localDate, keys as string[])));
   } else {
     const instants = keys as number[];
     const lo = new Date(Math.min(...instants) - SAME_ACTIVITY_MS);
@@ -207,7 +232,7 @@ export async function importedCounts(db: Db, userId: string): Promise<Record<"ap
 /** Remove everything an Apple Health import stored. */
 export async function deleteAppleHealth(db: Db, userId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    for (const table of [dailySummaries, sleepSessions, activities, vo2maxDaily, bodyMeasurements] as const) {
+    for (const table of [dailySummaries, sleepSessions, sleepStages, activities, vo2maxDaily, bodyMeasurements] as const) {
       await tx.delete(table).where(and(eq(table.userId, userId), eq(table.source, "apple_health")));
     }
   });

@@ -130,6 +130,40 @@ describe("Apple Health", () => {
     expect(d).toEqual({ steps: 7100, source: "apple_health" });
   });
 
+  it("keeps sleep stages only for nights stored from Apple Health, replacing a night as a whole", async () => {
+    await importRows(
+      db,
+      USER,
+      "apple_health",
+      parsed({ kind: "sleep", rows: [{ sourceRecordId: "apple-sleep-2023-03-11", localDate: "2023-03-11", startTime: "2023-03-10T23:00:00.000Z", endTime: "2023-03-11T07:00:00.000Z", totalSleepS: 27_000 }] }),
+    );
+    const stage = (date: string, start: string, end: string, s: "light" | "deep" | "awake") => ({ localDate: date, start, end, stage: s });
+    const first = await importRows(
+      db,
+      USER,
+      "apple_health",
+      parsed({
+        kind: "sleep_stages",
+        rows: [
+          stage("2023-03-11", "2023-03-10T23:00:00.000Z", "2023-03-11T02:00:00.000Z", "light"),
+          stage("2023-03-11", "2023-03-11T02:00:00.000Z", "2023-03-11T07:00:00.000Z", "deep"),
+          // 2 March is Garmin's night: its Apple stages are dropped.
+          stage("2023-03-02", "2023-03-01T23:00:00.000Z", "2023-03-02T06:00:00.000Z", "light"),
+        ],
+      }),
+    );
+    expect(first).toEqual({ written: 2, superseded: 1 });
+    // Re-import with different stages replaces the night.
+    await importRows(db, USER, "apple_health", parsed({ kind: "sleep_stages", rows: [stage("2023-03-11", "2023-03-10T23:30:00.000Z", "2023-03-11T07:00:00.000Z", "light")] }));
+    const rowsNow = await rows(sql`select stage from sleep_stages where user_id = ${USER}::uuid and local_date = '2023-03-11'`);
+    expect(rowsNow).toEqual([{ stage: "light" }]);
+
+    // Garmin's night arriving removes Apple's night and its stages.
+    await supersedeApple(db, USER, "sleep", ["2023-03-11"]);
+    const [n] = await rows(sql`select count(*)::int as n from sleep_stages where user_id = ${USER}::uuid`);
+    expect(n!.n).toBe(0);
+  });
+
   it("Garmin data arriving later removes the Apple copy", async () => {
     await db.insert(schema.dailySummaries).values({ userId: USER, localDate: "2023-03-10", source: "garmin", steps: 7300 });
     await supersedeApple(db, USER, "daily", ["2023-03-10"]);
