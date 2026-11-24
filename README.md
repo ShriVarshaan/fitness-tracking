@@ -1,10 +1,10 @@
 # Fitness tracking
 
-A personal training and recovery app for Garmin data, built to run for £0: dashboards, trends, grounded insights and chat, training plans, nutrition and a year in review.
+A personal training and recovery app for Garmin data, built to run for £0: dashboards, trends, grounded insights and chat, performance estimates, training plans, nutrition and a year in review.
 
 - **App:** Next.js on Vercel (Hobby)
 - **Data, login, secrets, scheduling:** Supabase (Free, Frankfurt)
-- **Data source:** Garmin Personal API key, pasted into the app's Settings page
+- **Data sources:** Garmin Personal API key, pasted into the app's Settings page; older Garmin history and Apple Health from their export files (Settings → Import, read in the browser)
 
 The full design is in [`docs/PLAN.md`](docs/PLAN.md).
 

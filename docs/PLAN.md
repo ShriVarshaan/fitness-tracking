@@ -1,6 +1,6 @@
 # Personal Fitness Tracker — Plan
 
-> Status: Phases 0–3 built (see Progress below); Phase 4 is open-ended. Rewritten 16 Nov 2026 for a £0 build with open sign-up.
+> Status: Phases 0–3 built, Phase 4 mostly built (see Progress below). Rewritten 16 Nov 2026 for a £0 build with open sign-up.
 > It replaces the earlier family / Garmin Starter / Oracle Cloud plan, which was never committed.
 
 ## Context
@@ -315,7 +315,7 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
 
 ---
 
-## Progress (19 Nov 2026)
+## Progress (24 Nov 2026)
 
 **Done:**
 - **Phase 0:** monorepo, CI, Supabase (Frankfurt), Vercel (`fra1`), email and password sign-up, optional TOTP, RLS on every table.
@@ -343,24 +343,33 @@ Effort assumes full-time work; multiply by about 3–4 for evenings and weekends
   - Nutrition: food diary, Open Food Facts search and barcode lookup (camera scanning where the browser supports it), custom foods, weight log and adaptive energy and macro targets.
   - 3D route maps (terrain from AWS Terrain Tiles).
   - Year in review (/recap).
+- **Phase 4 (24 Nov):**
+  - Performance on Trends: best efforts (1 km to marathon) from per-second distance, critical speed and critical power (linear work–time fit of 3/5/10/20-minute bests), and Riegel race predictions from the nearest best effort of at least 3 km.
+  - Garmin weight mapper (Garmin Connect's web shape, unverified because the account has no weigh-ins; implausible values quarantine the response).
+  - Import page: Garmin account export and Apple Health, parsed in the browser and validated on both sides, with Garmin API > Garmin export > Apple Health precedence (ADR 0003).
+  - Sleep Regularity Index (Phillips 2017) on Trends, now feeding readiness (v2). Nights known only by start and end are flagged approximate.
+  - On branch `sleep-stages`, waiting for its migration: a `sleep_stages` table, Garmin's per-night sleep levels (endpoint not yet observed) and Apple Health stages, so SRI counts wake-ups during the night.
 
 **Deviations from this plan:**
 - Garmin daily data lives in dedicated tables (`daily_summaries`, `hrv_daily`, `vo2max_daily`) rather than the generic `observations` table. That table is kept for future intraday or other-source data.
 - Training load is Edwards zone TRIMP (Garmin zones, else zones from the HR stream), not Banister TRIMP. Session-RPE load is shown alongside, never added to it (different scale).
-- Sleep regularity (SRI) is still missing until sleep epochs are fetched; sleep midpoint variability is shown on Trends instead and readiness keeps renormalising without regularity.
+- SRI uses each night's start and end until sleep stages are stored (branch `sleep-stages`), so wake-ups during the night aren't counted yet; it is flagged approximate with confidence × 0.6.
+- Race prediction uses Riegel only; the VDOT cross-check isn't built.
 - AI wording is on by default (opt-out), the owner's decision of 16 Nov 2026; sign-up text and the privacy notice say so.
 - Dashboards use one y-axis per chart, not overlays on dual axes: metrics on one chart must share a unit, and comparisons use the previous period.
-- Weight comes from the app's own weight log (`body_measurements`, source `manual`): the Personal API account has no weight data to build a Garmin mapper against.
+- Weight lives in `body_measurements` with one row per source (`manual`, `garmin`, `apple_health`); readers keep one per day, preferring the one entered in the app.
+- Imports aren't landed in `raw_ingest` (the files are large and stay on the device; ADR 0003).
 - Garmin, Security and Account sit under one Settings link.
 - Push needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` in Vercel; without them the app hides the switch.
 
 **Still to check by hand (§13):**
 - Phase 1: activity counts match Garmin Connect for the same range; a short recorded walk appears within about 30 minutes; the next morning's insight cites the real sleep, HRV and resting-HR values. (The last recorded activity is from 9 April, so "0 sessions in 30 days" on Today was correct.)
-- Phase 2: with Gemini on, `pnpm test:live` meets the hard-check bar; push arrives on a phone once the VAPID keys are set.
+- Phase 2: push arrives on a phone (VAPID keys are set). `pnpm test:live` on 24 Nov: every failure was Gemini overload (timeouts, "high demand"), none were validation failures; rerun when the service is quieter.
+- Phase 4: apply the `sleep_stages` migration, merge `sleep-stages`, then check that Settings → Garmin shows sleep stages syncing (not quarantined); import a real Garmin export and Apple Health export and compare the counts.
 
 **Next (Phase 4 and small items):**
-- Garmin weight mapper once the account has weight data; Apple Health import; Garmin account export importer; critical speed or power and race predictor; self-hosted map tiles.
-- Sleep epochs for SRI; an observation table for intraday data if needed.
+- Self-hosted map tiles (needs a decision on where to host them for £0).
+- Confirm the Garmin weight and sleep-level shapes against real responses; a VDOT cross-check for race predictions; an observation table for intraday data if needed.
 
 ---
 
