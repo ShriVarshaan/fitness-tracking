@@ -53,7 +53,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
       .lte("local_date", latestDate)
       .then(({ data }) => (data ?? []) as DerivedRow[]);
 
-  const [ctl, atl, tsb, acwr, hrvBase, rhrBase, { data: days }, { data: hrv }, { data: sleep }, { data: vo2 }, { data: prof }, { data: weight }, running, cycling] =
+  const [ctl, atl, tsb, acwr, hrvBase, rhrBase, sri, { data: days }, { data: hrv }, { data: sleep }, { data: vo2 }, { data: prof }, { data: weight }, running, cycling] =
     await Promise.all([
       derived("ctl"),
       derived("atl"),
@@ -61,6 +61,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
       derived("acwr"),
       derived("hrv_baseline"),
       derived("rhr_baseline"),
+      derived("sri"),
       supabase
         .from("daily_summaries")
         .select("local_date, source, resting_hr, intensity_min_moderate, intensity_min_vigorous")
@@ -173,7 +174,7 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
         />
       </Section>
 
-      <Section title="Sleep" intro={`Sleep times and durations are ${sleepVendor}'s. Timing variability is our estimate.`}>
+      <Section title="Sleep" intro={`Sleep times and durations come from ${sleepVendor}. Timing variability and regularity are our estimates.`}>
         <TrendChart
           title="Sleep duration"
           labels={axis}
@@ -200,6 +201,18 @@ export default async function TrendsPage(props: PageProps<"/trends">) {
           {nights.length ? <SleepTimingChart axis={axis} nights={nights} /> : <p className="text-sm text-muted">Not available: no sleep recorded in this period.</p>}
           <p className="text-xs text-muted">Each bar runs from falling asleep to waking. Ragged ends mean irregular timing.</p>
         </figure>
+        <TrendChart
+          title="Sleep Regularity Index"
+          labels={axis}
+          unit=""
+          series={[{ name: "SRI, last 14 days (estimate)", slot: 1, values: align(axis, sri, (r) => r.value) }]}
+          yMax={100}
+          note={
+            last(sri)?.components.approximate
+              ? "100 means the same sleep and wake times every day. From the times you fell asleep and woke only, so wake-ups during the night aren't counted and the index reads high."
+              : "100 means the same sleep and wake times every day; 0 is no more regular than chance."
+          }
+        />
       </Section>
 
       <Section title="Activity and fitness">

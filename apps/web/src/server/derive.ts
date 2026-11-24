@@ -51,6 +51,7 @@ const METRIC_ALGO: Record<string, keyof typeof ALGO_VERSION> = {
   tsb: "pmc",
   acwr: "acwr",
   readiness: "readiness",
+  sri: "sri",
 };
 
 /**
@@ -91,7 +92,7 @@ type Inputs = DeriveInputs & {
 };
 
 async function loadInputs(db: Db, userId: string): Promise<Inputs> {
-  const [hrv, days, nights, acts, prof, wakeRows, feedback, planned] = await Promise.all([
+  const [hrv, days, nights, acts, prof, wakeRows, sleepTimes, feedback, planned] = await Promise.all([
     db
       .select({ date: hrvDaily.localDate, value: hrvDaily.lastNightAvgMs })
       .from(hrvDaily)
@@ -142,6 +143,11 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       .where(eq(sleepSessions.userId, userId))
       .orderBy(desc(sleepSessions.localDate))
       .limit(WAKE_NIGHTS),
+    // Sleep start and end per night, for the Sleep Regularity Index.
+    db
+      .select({ date: sleepSessions.localDate, start: sleepSessions.startTime, end: sleepSessions.endTime, tz: sleepSessions.tzOffsetMin })
+      .from(sleepSessions)
+      .where(eq(sleepSessions.userId, userId)),
     db
       .select({ source: activityFeedback.source, id: activityFeedback.sourceRecordId, rpe: activityFeedback.rpe })
       .from(activityFeedback)
@@ -181,6 +187,7 @@ async function loadInputs(db: Db, userId: string): Promise<Inputs> {
       return { id: a.id, date: a.date, zoneSeconds: a.zoneSeconds, hrStream: s?.timeS && s.hr ? { timeS: s.timeS, hr: s.hr } : null };
     }),
     sleepNeedS: (prof?.sleepNeedMin ?? DEFAULT_SLEEP_NEED_MIN) * 60,
+    sleepNights: sleepTimes.map((n) => ({ date: n.date, tzOffsetMin: n.tz, asleep: [[n.start.getTime(), n.end.getTime()]] as Array<[number, number]>, fromStages: false })),
     daily: days.map((d) => ({ date: d.date, steps: d.steps, moderate: d.moderate, vigorous: d.vigorous })),
     activityDurations: acts.map((a) => ({ date: a.date, durationS: a.durationS })),
     stepsGoal: new Map(days.flatMap((d) => (d.stepsGoal ? [[d.date, d.stepsGoal] as const] : []))),

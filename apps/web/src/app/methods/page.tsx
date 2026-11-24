@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "How estimates are calculated" };
 const METHODS: Array<{ name: string; how: string; needs: string; source: string }> = [
   {
     name: "Readiness (estimate)",
-    how: "A 0–100 weighted mean of component scores: HRV 30%, resting heart rate 20%, sleep 20%, sleep regularity 10%, training load 20%. Missing components are left out and the weights rescaled. HRV, resting HR and load use a logistic curve that gives 50 at your baseline. Sleep scores 0 at half your sleep need and 100 at your full need.",
+    how: "A 0–100 weighted mean of component scores: HRV 30%, resting heart rate 20%, sleep 20%, sleep regularity 10%, training load 20%. Missing components are left out and the weights rescaled. HRV, resting HR and load use a logistic curve that gives 50 at your baseline. Sleep scores 0 at half your sleep need and 100 at your full need. Regularity is the Sleep Regularity Index below (negative values count as 0).",
     needs: "At least half of the weight available.",
     source: "Our own heuristic, informed by Plews et al. 2013 and Buchheit 2014. It has not been validated and is not Garmin's Training Readiness or Body Battery.",
   },
@@ -33,6 +33,12 @@ const METHODS: Array<{ name: string; how: string; needs: string; source: string 
     how: "For each night, the clock time halfway between falling asleep and waking (measured from noon, so 23:00 and 01:00 are two hours apart). The figure shown is the standard deviation of those midpoints over the period: smaller means more regular sleep.",
     needs: "5 nights with sleep times; full confidence from 14.",
     source: "Sleep midpoint variability, reported alongside the Sleep Regularity Index by Phillips et al. 2017, Scientific Reports 7:3216.",
+  },
+  {
+    name: "Sleep Regularity Index",
+    how: "How likely you are to be in the same state, asleep or awake, at the same clock time on consecutive days, minute by minute over the last 14 days, scaled so 100 means identical timing every day and 0 means no better than chance. Each day runs from noon to noon in that night's time zone. Days with no recorded night are left out, not counted as awake. When only the times you fell asleep and woke are known, wake-ups during the night can't be seen, so the index reads higher than it should and confidence is cut to 60% (our own heuristic).",
+    needs: "5 pairs of consecutive recorded nights in the last 14 days; full confidence from 13.",
+    source: "Phillips et al. 2017, Scientific Reports 7:3216.",
   },
   {
     name: "Training load (TRIMP)",

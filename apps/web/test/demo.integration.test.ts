@@ -34,7 +34,7 @@ describe("demo data end to end", () => {
     expect(await count("sleep_sessions")).toBe(120);
     expect(await count("hrv_daily")).toBe(120);
     expect(await count("activities")).toBeGreaterThan(40);
-    expect(await count("derived_daily")).toBe(120 * 9);
+    expect(await count("derived_daily")).toBe(120 * 10);
     expect(await count("findings")).toBeGreaterThan(0);
 
     const [insight] = await db.execute<{ validator_ok: boolean; headline: string }>(

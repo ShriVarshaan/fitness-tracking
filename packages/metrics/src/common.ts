@@ -19,7 +19,9 @@ export const ALGO_VERSION = {
   trimp_edwards: 3,
   pmc: 1,
   acwr: 1,
-  readiness: 1,
+  sri: 1,
+  // v2: sleep regularity (SRI) feeds the regularity component.
+  readiness: 2,
 } as const;
 
 /** Values whose date falls in [end − days + 1, end]. */

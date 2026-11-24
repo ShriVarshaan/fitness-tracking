@@ -27,9 +27,26 @@ describe("deriveAll", () => {
     const rows = deriveAll(inputs(20));
     const codes = new Set(rows.map((r) => r.metricCode));
     expect([...codes].sort()).toEqual(
-      ["acwr", "atl", "ctl", "hrv_baseline", "readiness", "rhr_baseline", "sleep_debt", "trimp_daily", "tsb"].sort(),
+      ["acwr", "atl", "ctl", "hrv_baseline", "readiness", "rhr_baseline", "sleep_debt", "sri", "trimp_daily", "tsb"].sort(),
     );
     expect(rows).toHaveLength(20 * codes.size);
+  });
+
+  it("feeds the Sleep Regularity Index into readiness", () => {
+    const base = inputs(20);
+    const nights = days(20).map((date) => {
+      const end = Date.parse(`${date}T07:00:00Z`);
+      return { date, tzOffsetMin: 0, asleep: [[end - 8 * 3600_000, end]] as Array<[number, number]>, fromStages: false };
+    });
+    const rows = deriveAll({ ...base, sleepNights: nights });
+    const sri = pick(rows, "2026-01-20", "sri");
+    expect(sri?.value).toBe(100);
+    expect(sri?.components).toEqual({ pairs: 13, approximate: true });
+    const ready = pick(rows, "2026-01-20", "readiness");
+    expect(ready?.components.missing).not.toContain("regularity");
+    expect((ready?.components.components as Record<string, number>).regularity).toBe(100);
+    // Without nights, regularity is listed as missing.
+    expect(pick(deriveAll(base), "2026-01-20", "readiness")?.components.missing).toContain("regularity");
   });
 
   it("stores a reason, not a guess, before there is enough history", () => {

@@ -31,6 +31,7 @@ const METRICS = {
   fatigue: { derived: "atl", unit: "load", label: "Fatigue, acute load (our estimate)" },
   form: { derived: "tsb", unit: "load", label: "Form = fitness - fatigue (our estimate)" },
   sleep_debt: { derived: "sleep_debt", unit: "s", label: "7-night sleep debt (our estimate)" },
+  sleep_regularity: { derived: "sri", unit: "score", label: "Sleep Regularity Index over 14 days (our estimate, -100 to 100; 100 = identical timing)" },
   weight: { table: "body_measurements", column: "weight_kg", unit: "kg", label: "Weight (entered by the user, or from a Garmin scale or Apple Health)" },
   energy_eaten: { table: "food_log", column: "kcal", unit: "kcal", label: "Energy eaten, daily total from the food diary", sum: true },
   protein_eaten: { table: "food_log", column: "protein_g", unit: "g", label: "Protein eaten, daily total from the food diary", sum: true },

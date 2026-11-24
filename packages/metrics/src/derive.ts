@@ -4,7 +4,7 @@ import { hrvBaseline, rhrBaseline } from "./baselines";
 import { ALGO_VERSION, type DatedValue } from "./common";
 import { activityTrimp, acwr, hrMaxFromActivities, pmc } from "./load";
 import { readiness } from "./readiness";
-import { sleepDebt } from "./sleep";
+import { sleepDebt, sleepRegularityIndex, type SleepNightIntervals } from "./sleep";
 
 export interface DeriveInputs {
   /** Garmin overnight RMSSD (ms) per wake date. */
@@ -23,6 +23,8 @@ export interface DeriveInputs {
     hrStream?: { timeS: number[]; hr: Array<number | null> } | null;
   }>;
   sleepNeedS: number;
+  /** Asleep intervals per night, for the Sleep Regularity Index (optional). */
+  sleepNights?: SleepNightIntervals[];
 }
 
 export interface DerivedRow {
@@ -137,6 +139,19 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
       [inputs.sleepNeedS, inputs.sleep.filter((p) => daysBetween(p.date, date) >= 0 && daysBetween(p.date, date) < 7)],
     );
 
+    const sri = sleepRegularityIndex(inputs.sleepNights ?? [], date);
+    push(
+      date,
+      "sri",
+      sri.ok ? sri.sri : null,
+      sri.ok ? { pairs: sri.pairs, approximate: sri.approximate } : { reason: sri.reason },
+      sri.ok ? sri.confidence : 0,
+      "sri",
+      (inputs.sleepNights ?? [])
+        .filter((n) => daysBetween(n.date, date) >= 0 && daysBetween(n.date, date) < 14)
+        .map((n) => [n.date, n.tzOffsetMin, n.asleep, n.fromStages]),
+    );
+
     const day = pmcDays.get(date)!;
     const loadComponents = {
       activitiesWithoutHrZones: missingLoad.get(date) ?? 0,
@@ -168,7 +183,7 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
       hrv: hrv.ok ? { z: hrv.z, confidence: hrv.confidence } : null,
       rhr: rhr.ok && rhrToday ? { todayBpm: rhrToday, baselineBpm: rhr.baselineBpm, sdBpm: rhr.sdBpm, confidence: rhr.confidence } : null,
       sleep: sleepToday ? { actualS: sleepToday, needS: inputs.sleepNeedS } : null,
-      regularity: null,
+      regularity: sri.ok ? { sri: sri.sri, confidence: sri.confidence } : null,
       load: { tsb: day.tsb, confidence: day.confidence },
     });
     push(
@@ -180,7 +195,7 @@ export function deriveAll(inputs: DeriveInputs): DerivedRow[] {
         : { reason: ready.reason, missing: ready.missing },
       ready.ok ? ready.confidence : 0,
       "readiness",
-      [hrv.ok ? round(hrv.z, 6) : null, rhrToday ?? null, sleepToday ?? null, round(day.tsb, 6), inputs.sleepNeedS],
+      [hrv.ok ? round(hrv.z, 6) : null, rhrToday ?? null, sleepToday ?? null, round(day.tsb, 6), inputs.sleepNeedS, sri.ok ? round(sri.sri, 6) : null],
     );
   }
   return rows;
