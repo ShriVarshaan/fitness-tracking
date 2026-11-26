@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface ChatMessage {
   id: string;
@@ -33,10 +33,19 @@ export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enable
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages, busy]);
+
+  // Grow with the text up to max-h-40 (about 7 lines), then scroll; shrinks back when cleared.
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [input]);
 
   async function send(text: string) {
     const message = text.trim();
@@ -138,18 +147,27 @@ export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enable
         <label htmlFor="chat-input" className="sr-only">
           Ask about your data
         </label>
-        <input
+        <textarea
           id="chat-input"
+          ref={inputRef}
+          rows={1}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter adds a line; never send mid-composition (IME).
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void send(input);
+            }
+          }}
           maxLength={1000}
           placeholder="Ask about your sleep, HRV, training…"
-          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="max-h-40 min-w-0 flex-1 resize-none overflow-y-auto rounded-md border border-border bg-surface px-3 py-2 text-sm leading-5 outline-none focus-visible:ring-2 focus-visible:ring-accent"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-60"
+          className="self-end rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-60"
         >
           Send
         </button>
