@@ -164,7 +164,8 @@ export async function POST(request: Request) {
           tools,
           stopWhen: isStepCount(6),
           maxRetries: 0,
-          temperature: 0.2,
+          // Some variety in wording and shape; every number is still checked against the tool results.
+          temperature: 0.6,
           abortSignal: AbortSignal.timeout(45_000),
           providerOptions: aiProviderOptions,
         });
