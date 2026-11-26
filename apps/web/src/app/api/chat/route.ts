@@ -1,12 +1,13 @@
 import { isRedFlagMessage, SAFETY_REPLY, safetyViolations, stripMarkdown, ungroundedChatNumbers } from "@ft/advice";
 import { schema } from "@ft/db";
-import { generateText, isStepCount, type ModelMessage } from "ai";
+import { isStepCount, streamText, type ModelMessage } from "ai";
 import { and, eq, gte, sql } from "drizzle-orm";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { encodeEvent, type ChatEvent } from "@/lib/chat-events";
 import { createClient } from "@/lib/supabase/server";
-import { aiAvailable, aiProviderOptions, chatModels, isTransientProviderError, languageModel, withModelFallback } from "@/server/ai";
-import { finalText, systemPrompt } from "@/server/chat-prompt";
+import { aiAvailable, aiProviderOptions, chatModels, isTransientProviderError, languageModel } from "@/server/ai";
+import { systemPrompt } from "@/server/chat-prompt";
 import { chatTools } from "@/server/chat-tools";
 import { getDb } from "@/server/db";
 
@@ -24,6 +25,15 @@ const body = z.object({
 
 type Reply = { answer: string; grounded: boolean | null; toolsUsed: string[]; model: string | null };
 
+/** One model attempt, streamed: the final step's text plus every tool result it saw. */
+type Attempt = { text: string; toolOutputs: unknown[]; toolsUsed: string[] };
+
+/**
+ * Answers over server-sent events (see lib/chat-events.ts). Text streams as the
+ * model writes it; the number check, markdown stripping and safety filter still
+ * run on the complete answer, and the `done` event carries the checked text.
+ * The answer is generated and saved even if the browser disconnects part-way.
+ */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
@@ -61,81 +71,151 @@ export async function POST(request: Request) {
       { userId, role: "user", content: message },
       { userId, role: "assistant", content: reply.answer, toolsUsed: reply.toolsUsed, grounded: reply.grounded, model: reply.model },
     ]);
-    return NextResponse.json(reply);
   };
 
-  // Possible emergencies get a fixed reply; the model never sees them.
-  if (isRedFlagMessage(message)) return save({ answer: SAFETY_REPLY, grounded: null, toolsUsed: [], model: null });
-
   const { data: latest } = await supabase.from("daily_summaries").select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle();
-  // Starts on the chat model; moves to the next one if it's busy or out of quota, and stays there.
-  let models = chatModels();
-  let model = models[0]!;
+  const system = systemPrompt(new Date().toISOString().slice(0, 10), (latest?.local_date as string | undefined) ?? null);
   const tools = chatTools(supabase);
   const messages: ModelMessage[] = [...history.map((h) => ({ role: h.role, content: h.content }) as ModelMessage), { role: "user", content: message }];
 
-  const ask = async (msgs: ModelMessage[]) => {
-    const { result, model: used } = await withModelFallback(models, (m) => call(m, msgs), (from, to, err) =>
-      console.warn(`chat: ${from} unavailable (${err instanceof Error ? err.message.slice(0, 120) : "error"}), trying ${to}`),
-    );
-    model = used;
-    models = models.slice(models.indexOf(used));
-    return result;
+  // The browser may leave mid-answer; keep generating so the reply is saved, and stop writing to the socket.
+  let open = true;
+  let controller!: ReadableStreamDefaultController<string>;
+  const stream = new ReadableStream<string>({
+    start: (c) => void (controller = c),
+    cancel: () => void (open = false),
+  });
+  const send = (event: ChatEvent) => {
+    if (!open) return;
+    try {
+      controller.enqueue(encodeEvent(event));
+    } catch {
+      open = false;
+    }
   };
-  const call = (m: string, msgs: ModelMessage[]) =>
-    generateText({
-      model: languageModel(m),
-      system: systemPrompt(new Date().toISOString().slice(0, 10), (latest?.local_date as string | undefined) ?? null),
-      messages: msgs,
-      tools,
-      stopWhen: isStepCount(6),
-      maxRetries: 0,
-      temperature: 0.2,
-      abortSignal: AbortSignal.timeout(45_000),
-      providerOptions: aiProviderOptions,
-    });
 
-  try {
+  // Starts on the chat model; moves to the next one if it's busy or out of quota, and stays there.
+  let models = chatModels();
+  let model = models[0]!;
+
+  /**
+   * Stream one answer. Text from a step that ends in tool calls is a preamble
+   * (the final answer comes from the last step), so it is reset on the client.
+   * Falls back to the next model only while nothing has been shown yet.
+   */
+  const ask = async (msgs: ModelMessage[]): Promise<Attempt> => {
+    for (let i = 0; ; i++) {
+      const m = models[i]!;
+      let shown = false;
+      let stepText = "";
+      const attempt: Attempt = { text: "", toolOutputs: [], toolsUsed: [] };
+      try {
+        const result = streamText({
+          model: languageModel(m),
+          system,
+          messages: msgs,
+          tools,
+          stopWhen: isStepCount(6),
+          maxRetries: 0,
+          temperature: 0.2,
+          abortSignal: AbortSignal.timeout(45_000),
+          providerOptions: aiProviderOptions,
+        });
+        for await (const part of result.fullStream) {
+          if (part.type === "text-delta") {
+            stepText += part.text;
+            shown = true;
+            send({ type: "delta", text: part.text });
+          } else if (part.type === "tool-call") {
+            send({ type: "status", text: "Looking at your data…" });
+          } else if (part.type === "tool-result") {
+            attempt.toolOutputs.push(part.output);
+            if (!attempt.toolsUsed.includes(part.toolName)) attempt.toolsUsed.push(part.toolName);
+          } else if (part.type === "finish-step") {
+            if (part.finishReason === "tool-calls") {
+              if (stepText) send({ type: "reset" });
+              stepText = "";
+            } else attempt.text = stepText;
+          } else if (part.type === "error") {
+            throw part.error;
+          }
+        }
+        if (!attempt.text) attempt.text = stepText;
+        model = m;
+        models = models.slice(i);
+        return attempt;
+      } catch (err) {
+        const next = models[i + 1];
+        if (shown || !next || !isTransientProviderError(err)) throw err;
+        console.warn(`chat: ${m} unavailable (${err instanceof Error ? err.message.slice(0, 120) : "error"}), trying ${next}`);
+      }
+    }
+  };
+
+  const answer = async (): Promise<Reply> => {
+    // Possible emergencies get a fixed reply; the model never sees them.
+    if (isRedFlagMessage(message)) return { answer: SAFETY_REPLY, grounded: null, toolsUsed: [], model: null };
+
     let result = await ask(messages);
-    let toolOutputs = result.steps.flatMap((s) => s.toolResults.map((r) => r.output));
-    let toolsUsed = [...new Set(result.steps.flatMap((s) => s.toolResults.map((r) => r.toolName)))];
-    let ungrounded = ungroundedChatNumbers(finalText(result), toolOutputs, message);
+    let toolOutputs = result.toolOutputs;
+    let toolsUsed = result.toolsUsed;
+    let ungrounded = ungroundedChatNumbers(result.text, toolOutputs, message);
 
     // One retry with feedback if a number can't be traced to the data.
     if (ungrounded.length) {
+      send({ type: "reset" });
+      send({ type: "status", text: "Double-checking the numbers…" });
       result = await ask([
         ...messages,
-        { role: "assistant", content: finalText(result) },
+        { role: "assistant", content: result.text },
         {
           role: "user",
           content: `These numbers in your answer don't appear in the tool results: ${ungrounded.join(", ")}. Answer again using only numbers that the tools return (call them again if needed).`,
         },
       ]);
-      toolOutputs = [...toolOutputs, ...result.steps.flatMap((s) => s.toolResults.map((r) => r.output))];
-      toolsUsed = [...new Set([...toolsUsed, ...result.steps.flatMap((s) => s.toolResults.map((r) => r.toolName))])];
-      ungrounded = ungroundedChatNumbers(finalText(result), toolOutputs, message);
+      toolOutputs = [...toolOutputs, ...result.toolOutputs];
+      toolsUsed = [...new Set([...toolsUsed, ...result.toolsUsed])];
+      ungrounded = ungroundedChatNumbers(result.text, toolOutputs, message);
     }
 
-    const text = stripMarkdown(finalText(result));
+    const text = stripMarkdown(result.text);
     if (!text || safetyViolations(text).length) {
-      return save({ answer: "I couldn't produce a safe answer to that. Try asking about a specific metric and date range.", grounded: null, toolsUsed, model });
+      return { answer: "I couldn't produce a safe answer to that. Try asking about a specific metric and date range.", grounded: null, toolsUsed, model };
     }
     if (ungrounded.length) {
-      return save({
+      return {
         answer: "I couldn't check every number in my answer against your data, so I won't show it. Try a narrower question, for example a single metric and date range.",
         grounded: false,
         toolsUsed,
         model,
-      });
+      };
     }
-    return save({ answer: text, grounded: true, toolsUsed, model });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn("chat failed:", msg.slice(0, 300));
-    const limited = isTransientProviderError(err);
-    return NextResponse.json(
-      { error: limited ? "The AI service is busy or out of free quota right now. Try again in a few minutes." : "Something went wrong answering that. Try again." },
-      { status: limited ? 429 : 502 },
-    );
-  }
+    return { answer: text, grounded: true, toolsUsed, model };
+  };
+
+  const work = (async () => {
+    try {
+      const reply = await answer();
+      await save(reply);
+      send({ type: "done", ...reply });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn("chat failed:", msg.slice(0, 300));
+      send({
+        type: "error",
+        message: isTransientProviderError(err)
+          ? "The AI service is busy or out of free quota right now. Try again in a few minutes."
+          : "Something went wrong answering that. Try again.",
+        retry: true,
+      });
+    } finally {
+      if (open) controller.close();
+    }
+  })();
+  // Keep the function alive until the answer is saved, even if the client has gone.
+  after(() => work);
+
+  return new Response(stream.pipeThrough(new TextEncoderStream()), {
+    headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" },
+  });
 }
