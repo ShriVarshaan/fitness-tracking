@@ -1,10 +1,11 @@
 import { isRedFlagMessage, SAFETY_REPLY, safetyViolations, stripMarkdown, ungroundedChatNumbers } from "@ft/advice";
 import { schema } from "@ft/db";
 import { isStepCount, streamText, type ModelMessage } from "ai";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { encodeEvent, type ChatEvent } from "@/lib/chat-events";
+import { chatTitle } from "@/lib/chat-title";
 import { createClient } from "@/lib/supabase/server";
 import { aiAvailable, aiProviderOptions, chatModels, isTransientProviderError, languageModel } from "@/server/ai";
 import { systemPrompt } from "@/server/chat-prompt";
@@ -16,12 +17,12 @@ export const maxDuration = 60;
 const MESSAGES_PER_HOUR = 30;
 
 const body = z.object({
+  chatId: z.uuid(),
   message: z.string().trim().min(1).max(1000),
-  history: z
-    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
-    .max(10)
-    .default([]),
 });
+
+/** Earlier messages from the same chat sent to the model as context. */
+const HISTORY_MESSAGES = 10;
 
 type Reply = { answer: string; grounded: boolean | null; toolsUsed: string[]; model: string | null };
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Send a message of up to 1000 characters." }, { status: 400 });
-  const { message, history } = parsed.data;
+  const { chatId, message } = parsed.data;
 
   if (!aiAvailable()) return NextResponse.json({ error: "Chat isn't available on this server." }, { status: 503 });
   const db = getDb();
@@ -66,11 +67,57 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `You've reached ${MESSAGES_PER_HOUR} messages this hour. Try again later.` }, { status: 429 });
   }
 
+  // The chat is created on its first message (the browser picked the id); an id owned by someone else is refused.
+  const [created] = await db
+    .insert(schema.chatConversations)
+    .values({ id: chatId, userId, title: chatTitle(message) })
+    .onConflictDoNothing()
+    .returning({ id: schema.chatConversations.id });
+  if (!created) {
+    const own = await db.query.chatConversations.findFirst({
+      columns: { id: true },
+      where: and(eq(schema.chatConversations.id, chatId), eq(schema.chatConversations.userId, userId)),
+    });
+    if (!own) return NextResponse.json({ error: "That chat doesn't exist." }, { status: 404 });
+  }
+
+  // Only this chat's own messages go to the model as context.
+  const earlier = await db
+    .select({ role: schema.chatMessages.role, content: schema.chatMessages.content })
+    .from(schema.chatMessages)
+    .where(and(eq(schema.chatMessages.conversationId, chatId), eq(schema.chatMessages.userId, userId)))
+    .orderBy(desc(schema.chatMessages.createdAt), desc(schema.chatMessages.id))
+    .limit(HISTORY_MESSAGES);
+  const history = earlier.reverse();
+
+  // Saved straight away so the chat shows the question if the page is reloaded mid-answer; removed if the answer fails.
+  const [question] = await db
+    .insert(schema.chatMessages)
+    .values({ userId, conversationId: chatId, role: "user", content: message })
+    .returning({ id: schema.chatMessages.id });
+
   const save = async (reply: Reply) => {
-    await db.insert(schema.chatMessages).values([
-      { userId, role: "user", content: message },
-      { userId, role: "assistant", content: reply.answer, toolsUsed: reply.toolsUsed, grounded: reply.grounded, model: reply.model },
-    ]);
+    await db.insert(schema.chatMessages).values({
+      userId,
+      conversationId: chatId,
+      role: "assistant",
+      content: reply.answer,
+      toolsUsed: reply.toolsUsed,
+      grounded: reply.grounded,
+      model: reply.model,
+    });
+    await db
+      .update(schema.chatConversations)
+      .set({ updatedAt: new Date() })
+      .where(and(eq(schema.chatConversations.id, chatId), eq(schema.chatConversations.userId, userId)));
+  };
+
+  /** Undo the saved question (and a chat created for it) so a retry starts clean. */
+  const discard = async () => {
+    await db.delete(schema.chatMessages).where(and(eq(schema.chatMessages.id, question!.id), eq(schema.chatMessages.userId, userId)));
+    if (created) {
+      await db.delete(schema.chatConversations).where(and(eq(schema.chatConversations.id, chatId), eq(schema.chatConversations.userId, userId)));
+    }
   };
 
   const { data: latest } = await supabase.from("daily_summaries").select("local_date").order("local_date", { ascending: false }).limit(1).maybeSingle();
@@ -201,6 +248,7 @@ export async function POST(request: Request) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn("chat failed:", msg.slice(0, 300));
+      await discard().catch(() => console.warn("chat: couldn't remove the unanswered question"));
       send({
         type: "error",
         message: isTransientProviderError(err)

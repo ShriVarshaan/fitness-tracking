@@ -1,5 +1,6 @@
-import { bigserial, boolean, date, index, jsonb, pgTable, primaryKey, real, smallint, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { ownerReadPolicy, userId } from "./_shared";
+import { sql } from "drizzle-orm";
+import { bigserial, boolean, check, date, foreignKey, index, jsonb, pgTable, primaryKey, real, smallint, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { createdAt, ownerReadPolicy, userId } from "./_shared";
 
 /**
  * Our own estimates (never Garmin's metrics), one row per user, day and metric.
@@ -56,12 +57,36 @@ export const insights = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.forDate] }), ownerReadPolicy("insights")],
 ).enableRLS();
 
+/**
+ * Separate chat conversations. The id is created by the browser (a UUID) so a
+ * new chat has its URL before the first answer arrives. Written only by server
+ * code after checking the session; `updated_at` moves on every new message.
+ */
+export const chatConversations = pgTable(
+  "chat_conversations",
+  {
+    id: uuid("id").primaryKey(),
+    userId: userId(),
+    title: text("title").notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("chat_conversations_user_updated_idx").on(t.userId, t.updatedAt),
+    // Target of chat_messages' composite key, so a message can't sit in another user's chat.
+    unique("chat_conversations_id_user_key").on(t.id, t.userId),
+    check("chat_conversations_title_length", sql`char_length(${t.title}) between 1 and 80`),
+    ownerReadPolicy("chat_conversations"),
+  ],
+).enableRLS();
+
 /** Chat history: questions, answers, which read-only tools were used and whether numbers were verified. */
 export const chatMessages = pgTable(
   "chat_messages",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
     userId: userId(),
+    conversationId: uuid("conversation_id").notNull(),
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
     content: text("content").notNull(),
     toolsUsed: text("tools_used").array().notNull().default([]),
@@ -70,7 +95,16 @@ export const chatMessages = pgTable(
     model: text("model"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("chat_messages_user_created_idx").on(t.userId, t.createdAt), ownerReadPolicy("chat_messages")],
+  (t) => [
+    index("chat_messages_user_created_idx").on(t.userId, t.createdAt),
+    index("chat_messages_conversation_created_idx").on(t.conversationId, t.createdAt),
+    foreignKey({
+      name: "chat_messages_conversation_fk",
+      columns: [t.conversationId, t.userId],
+      foreignColumns: [chatConversations.id, chatConversations.userId],
+    }).onDelete("cascade"),
+    ownerReadPolicy("chat_messages"),
+  ],
 ).enableRLS();
 
 /**

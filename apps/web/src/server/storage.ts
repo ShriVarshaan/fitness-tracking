@@ -19,6 +19,7 @@ const USER_TABLES = [
   "derived_daily",
   "findings",
   "insights",
+  "chat_conversations",
   "chat_messages",
   "sync_jobs",
 ] as const;

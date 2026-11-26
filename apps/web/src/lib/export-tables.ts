@@ -16,6 +16,7 @@ export const EXPORT_TABLES = [
   "derived_daily",
   "findings",
   "insights",
+  "chat_conversations",
   "chat_messages",
   "training_plans",
   "planned_workouts",

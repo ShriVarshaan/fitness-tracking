@@ -47,7 +47,8 @@ const SEED: Record<string, (u: string) => postgres.PendingQuery<postgres.Row[]>>
     sql`insert into derived_daily (user_id, local_date, metric_code, value, algo_version, inputs_hash) values (${u}, '2026-01-01', 'readiness', 60, 1, 'h')`,
   findings: (u) =>
     sql`insert into findings (user_id, local_date, rule_id, rule_version, severity, confidence, evidence) values (${u}, '2026-01-01', 'R', 1, 'info', 1, '[]'::jsonb)`,
-  chat_messages: (u) => sql`insert into chat_messages (user_id, role, content) values (${u}, 'user', 'hello')`,
+  chat_conversations: (u) => sql`insert into chat_conversations (id, user_id, title) values (${u}, ${u}, 'Hello')`,
+  chat_messages: (u) => sql`insert into chat_messages (user_id, conversation_id, role, content) values (${u}, ${u}, 'user', 'hello')`,
   push_subscriptions: (u) =>
     sql`insert into push_subscriptions (user_id, endpoint, p256dh, auth) values (${u}, ${`https://push.example.test/${u}`}, 'p256dh-key', 'auth-key')`,
   insights: (u) =>
@@ -70,6 +71,7 @@ const SERVER_WRITE_ONLY = [
   "derived_daily",
   "findings",
   "insights",
+  "chat_conversations",
   "chat_messages",
   "push_subscriptions",
 ];
@@ -191,6 +193,13 @@ describe("server-only writes", () => {
       expect(deleted).toHaveLength(0);
     });
   }
+
+  it("chat_messages: a message can't be filed in another user's conversation, even by server code", async () => {
+    // A's seeded conversation has id = A; server code connects as a privileged role, so only the key stops this.
+    await expect(sql`insert into chat_messages (user_id, conversation_id, role, content) values (${B}, ${A}, 'user', 'x')`).rejects.toThrow(
+      /chat_messages_conversation_fk/,
+    );
+  });
 
   it("the owner cannot queue their own sync jobs", async () => {
     await expect(

@@ -1,22 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { readEvents } from "@/lib/chat-events";
+import { useChats, type ChatMessage } from "./chat-store";
 
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  toolsUsed: string[];
-  grounded: boolean | null;
-  /** Client-only state for an answer in progress or one that failed. */
-  streaming?: boolean;
-  status?: string;
-  error?: string;
-  /** The question this answer is for, so a failed answer can be retried. */
-  question?: string;
-}
+export type { ChatMessage };
 
 const SUGGESTIONS = [
   "How has my HRV changed this month compared with last month?",
@@ -34,8 +23,20 @@ const TOOL_LABELS: Record<string, string> = {
   get_findings: "findings",
 };
 
-export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enabled: boolean }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initial);
+/** Waiting for an answer that was still being written when this page loaded. */
+const PENDING_POLL_MS = 3000;
+const PENDING_POLLS = 20;
+
+/**
+ * One chat. `chatId` is null on /chat (a new chat): the first question picks an
+ * id and moves to /chat/<id>. Messages come from the store once this tab has
+ * sent in the chat, otherwise from the server (`initial`).
+ */
+export function ChatPanel({ chatId, initial, missing = false }: { chatId: string | null; initial: ChatMessage[]; missing?: boolean }) {
+  const router = useRouter();
+  const { threads, send: sendTo, retry: retryIn } = useChats();
+  const local = chatId ? threads[chatId] : undefined;
+  const messages = local ?? initial;
   const [input, setInput] = useState("");
   const busy = messages.some((m) => m.streaming);
   const endRef = useRef<HTMLDivElement>(null);
@@ -63,67 +64,40 @@ export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enable
     el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
   }, [input]);
 
-  async function send(text: string, base = messages) {
-    const message = text.trim();
-    if (!message || busy) return;
-    // Only completed exchanges go to the model as context.
-    const history = base
-      .filter((m) => !m.streaming && !m.error)
-      .slice(-10)
-      .map((m) => ({ role: m.role, content: m.content }));
-    const replyId = crypto.randomUUID();
-    const update = (patch: (m: ChatMessage) => Partial<ChatMessage>) =>
-      setMessages((all) => all.map((m) => (m.id === replyId ? { ...m, ...patch(m) } : m)));
+  // Loaded mid-answer (e.g. after a refresh): the server is still writing it, so check back until it's saved.
+  const pending = !local && initial.at(-1)?.role === "user";
+  useEffect(() => {
+    if (!pending) return;
+    let polls = 0;
+    const timer = setInterval(() => {
+      if (++polls > PENDING_POLLS) clearInterval(timer);
+      else router.refresh();
+    }, PENDING_POLL_MS);
+    return () => clearInterval(timer);
+  }, [pending, router]);
+
+  function send(text: string) {
+    if (!text.trim() || busy || pending) return;
     followRef.current = true;
-    setMessages([
-      ...base,
-      { id: crypto.randomUUID(), role: "user", content: message, toolsUsed: [], grounded: null },
-      { id: replyId, role: "assistant", content: "", toolsUsed: [], grounded: null, streaming: true, question: message },
-    ]);
     setInput("");
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history }),
-      });
-      if (!res.ok || !res.body || !res.headers.get("content-type")?.includes("text/event-stream")) {
-        const data = await res.json().catch(() => ({}));
-        update(() => ({ streaming: false, error: data.error ?? "Something went wrong. Try again." }));
-        return;
-      }
-      let finished = false;
-      for await (const event of readEvents(res.body)) {
-        if (event.type === "delta") update((m) => ({ content: m.content + event.text, status: undefined }));
-        else if (event.type === "reset") update(() => ({ content: "" }));
-        else if (event.type === "status") update(() => ({ status: event.text }));
-        else if (event.type === "done") {
-          finished = true;
-          update(() => ({ content: event.answer, toolsUsed: event.toolsUsed, grounded: event.grounded, streaming: false, status: undefined }));
-        } else if (event.type === "error") {
-          finished = true;
-          update(() => ({ streaming: false, status: undefined, error: event.message }));
-        }
-      }
-      if (!finished) update(() => ({ streaming: false, status: undefined, error: "The answer was cut off. Try again." }));
-    } catch {
-      update(() => ({ streaming: false, status: undefined, error: "Couldn't reach the server. Check your connection and try again." }));
-    }
+    if (chatId) return sendTo(chatId, text, messages);
+    const id = crypto.randomUUID();
+    sendTo(id, text, []);
+    router.replace(`/chat/${id}`);
   }
 
-  /** Drop the failed exchange and ask the same question again. */
   function retry(failed: ChatMessage) {
-    const i = messages.findIndex((m) => m.id === failed.id);
-    if (i < 1 || !failed.question) return;
-    void send(failed.question, messages.slice(0, i - 1));
+    if (!chatId) return;
+    followRef.current = true;
+    retryIn(chatId, failed, messages);
   }
 
-  if (!enabled) {
+  if (missing && !local) {
     return (
       <p className="rounded-lg border border-border bg-surface p-5 text-sm text-muted">
-        Chat uses AI, which is turned off for your account (or not configured on this server). You can turn it on in{" "}
-        <Link href="/settings/account" className="underline">
-          Account
+        This chat doesn&apos;t exist or was deleted.{" "}
+        <Link href="/chat" className="underline">
+          Start a new chat
         </Link>
         .
       </p>
@@ -183,13 +157,14 @@ export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enable
             </div>
           </div>
         ))}
+        {pending && <TypingIndicator label="Still answering this one…" />}
         <div ref={endRef} />
       </div>
 
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          void send(input);
+          send(input);
         }}
         className="flex gap-2"
       >
@@ -206,7 +181,7 @@ export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enable
             // Enter sends, Shift+Enter adds a line; never send mid-composition (IME).
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              void send(input);
+              send(input);
             }
           }}
           maxLength={1000}
@@ -215,7 +190,7 @@ export function ChatPanel({ initial, enabled }: { initial: ChatMessage[]; enable
         />
         <button
           type="submit"
-          disabled={busy || !input.trim()}
+          disabled={busy || pending || !input.trim()}
           className="self-end rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg disabled:opacity-60"
         >
           Send
